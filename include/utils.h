@@ -3,10 +3,11 @@
 //
 
 #include <string>
-#include <stdio.h>
+#include <cstdio>
 #include <ctime>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <vector>
 
 /**
  * 获取系统当前时间
@@ -14,10 +15,19 @@
  */
 std::string cur_time();
 
+
 /**
- * 通过文件描述符fd，读取一行数据到dest
+ * 通过src读取一行数据返回读到的字符串和字符串的结尾位置
  * @param fd
  * @param dest
+ * @param start
  * @return
  */
-size_t read_line(int fd, std::string &dest);
+std::pair<std::string, size_t> read_line(const std::string &src, size_t start);
+
+
+/**
+ * 字符串切分
+ * @return
+ */
+std::vector<std::string> split(const std::string &src, const std::string &rep);

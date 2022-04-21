@@ -7,23 +7,25 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
-class HttpRequest {
-private:
-    std::string method_;         /*请求方法*/
-    std::string path_;           /*请求路径*/
-    std::string request_header_; /*请求头*/
-    std::string request_body_;   /*请求正文*/
+struct HttpData {
+    std::string method_;    /*方法*/
+    std::string version_;   /*版本*/
+    std::unordered_map<std::string, std::string> header_;   /*请求头*/
+    std::string body_;      /*正文*/
+};
+
+class HttpRequest : public HttpData {
+public:
+    std::string url_;                          /*请求路径*/
 };
 
 
-class HttpResponse {
-private:
-    std::string version_;                      /*响应HTTP版本*/
+class HttpResponse : public HttpData {
+public:
     std::string code_;                         /*响应状态码*/
     std::string code_msg_;                     /*响应状态码描述*/
-    std::vector<std::string> response_header_; /*响应头*/
-    std::string body_;                         /*响应正文*/
 };
 
 #endif //WEBSERVER_PROTOCOL_H

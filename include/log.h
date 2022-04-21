@@ -15,15 +15,18 @@ enum class Level : char {
     FATAL
 };
 
-#define LOG_INFO(message) log(Level::INFO, message)
 
-#define LOG_WARRING(message) log(Level::WARRING, message)
+#define LOG_INFO(format, ...) log(format, level_str(Level::INFO), __FILE__, __LINE__, ##__VA_ARGS__)
 
-#define LOG_ERROR(message) log(Level::ERROR, message)
+#define LOG_WARRING(format, ...) log(format, level_str(Level::WARRING), __FILE__, __LINE__, ##__VA_ARGS__)
 
-#define LOG_FATAL(message) log(Level::FATAL, message)
+#define LOG_ERROR(format, ...) log(format, level_str(Level::ERROR), __FILE__, __LINE__, ##__VA_ARGS__)
 
-void log(Level level, std::string message);
+#define LOG_FATAL(format, ...) log(format, level_str(Level::FATAL), __FILE__, __LINE__, ##__VA_ARGS__)
+
+
+void log(const std::string format, const std::string level, const std::string file, int line, ...);
+
 
 const char *level_str(Level level);
 

@@ -5,23 +5,59 @@
 #ifndef WEBSERVER_WEBSERVER_H
 #define WEBSERVER_WEBSERVER_H
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <unordered_map>
-#include "tcp_server.h"
 #include "http_connect.h"
+#include "iocntl.h"
+#include "log.h"
+
 
 class Webserver {
-    using port_t = TcpServer::port_t;
+    using port_t = unsigned short;
 private:
-    TcpServer tcp_svr_;
+    int lfd_;
+    IOCntl ioc_;
+    port_t port_;
     std::unordered_map<int, HttpConnect> connects_;
 
 public:
     explicit Webserver(port_t port);
 
-    void start();
+    ~Webserver();
 
-    [[noreturn]] void accept();
+    /**
+     * 初始化webserver
+     */
+    void init_server();
+
+    /**
+     * 进行事件分发
+     */
+    [[noreturn]] void dispatch();
+
+private:
+    /**
+     * 接收请求处理
+     */
+    void accept_cb();
+
+    /**
+     * 响应回调
+     * @param fd
+     */
+    void recv_cb(int fd);
+
+    /**
+     * 出错回调
+     * @param fd
+     */
+    void error_cb(int fd);
 };
+
 
 
 #endif //WEBSERVER_WEBSERVER_H

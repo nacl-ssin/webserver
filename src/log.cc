@@ -1,11 +1,17 @@
 //
 // Created by 26372 on 2022/4/17.
 //
+#include <cstdarg>
 #include "log.h"
 
-void log(Level level, const std::string message) {
-    fprintf(stdout, "[%s][%s][%s][%s:%d]\n", level_str(level), cur_time().c_str(), message.c_str(), __FILE__, __LINE__);
+void log(const std::string format, const std::string level, const std::string file, int line, ...) {
+    std::string str = cur_time() + " --- " + level + " [ " + file + ":" + std::to_string(line) + " ] : " + format + "\n";
+    va_list args;
+    va_start(args, str.size());
+    vfprintf(stdout, str.c_str(), args);
+    va_end(args);
 }
+
 
 const char *level_str(Level level) {
     const char *ret = "";
@@ -25,3 +31,4 @@ const char *level_str(Level level) {
     }
     return ret;
 }
+
