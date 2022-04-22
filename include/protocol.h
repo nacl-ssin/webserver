@@ -10,22 +10,36 @@
 #include <unordered_map>
 
 struct HttpData {
-    std::string method_;    /*方法*/
-    std::string version_;   /*版本*/
-    std::unordered_map<std::string, std::string> header_;   /*请求头*/
-    std::string body_;      /*正文*/
+	std::string _method;    /*方法*/
+	std::string _version;   /*版本*/
+	std::vector<std::pair<std::string, std::string>> _header;   /*请求头*/
+	std::string _body;      /*正文*/
 };
 
-class HttpRequest : public HttpData {
-public:
-    std::string url_;                          /*请求路径*/
+struct HttpRequest : public HttpData {
+	std::string _path;                          /*请求路径*/
+	std::string _query;
 };
 
 
-class HttpResponse : public HttpData {
-public:
-    std::string code_;                         /*响应状态码*/
-    std::string code_msg_;                     /*响应状态码描述*/
+struct HttpResponse : public HttpData {
+	std::string _code;                         /*响应状态码*/
+	std::string _code_msg;                     /*响应状态码描述*/
+
+	void set_header(std::string key, const std::size_t val) {
+		_header.emplace_back(std::move(key), std::to_string(val));
+	}
+
+	void set_header(std::string key, std::string val) {
+		_header.emplace_back(std::move(key), std::move(val));
+	}
 };
+
+/**
+ * 根据文件后缀名，返回content-type类型
+ * @param suffix
+ * @return
+ */
+std::string file_type(const std::string &suffix);
 
 #endif //WEBSERVER_PROTOCOL_H

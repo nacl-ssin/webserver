@@ -17,47 +17,46 @@
 
 
 class Webserver {
-    using port_t = unsigned short;
+	using port_t = unsigned short;
 private:
-    int lfd_;
-    IOCntl ioc_;
-    port_t port_;
-    std::unordered_map<int, HttpConnect> connects_;
+	int _lfd;
+	IOCntl _ioc;
+	port_t _port;
+	std::unordered_map<int, HttpConnect> _connects;
 
 public:
-    explicit Webserver(port_t port);
+	explicit Webserver(port_t port);
 
-    ~Webserver();
+	~Webserver();
 
-    /**
-     * 初始化webserver
-     */
-    void init_server();
+	/**
+	 * 初始化webserver
+	 */
+	void init_server();
 
-    /**
-     * 进行事件分发
-     */
-    [[noreturn]] void dispatch();
+	/**
+	 * 进行事件分发
+	 */
+	[[noreturn]] void dispatch();
 
 private:
-    /**
-     * 接收请求处理
-     */
-    void accept_cb();
+	/**
+	 * 接收请求处理
+	 */
+	void accept_cb();
 
-    /**
-     * 响应回调
-     * @param fd
-     */
-    void recv_cb(int fd);
+	/**
+	 * 响应回调
+	 * @param fd
+	 */
+	void recv_cb(int fd);
 
-    /**
-     * 出错回调
-     * @param fd
-     */
-    void error_cb(int fd);
+	/**
+	 * 出错回调
+	 * @param fd
+	 */
+	void error_cb(int fd);
 };
-
 
 
 #endif //WEBSERVER_WEBSERVER_H

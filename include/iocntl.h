@@ -12,8 +12,8 @@
 
 class IOCntl {
 private:
-    int epollfd_;
-    std::vector<epoll_event> evs_;
+    int _epollfd;
+    std::vector<epoll_event> _evs;
 
 public:
     IOCntl();

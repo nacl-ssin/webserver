@@ -4,13 +4,13 @@ CXX = g++
 SOURCE = src/*.cc main.cpp
 HEADER_DIR = include/
 
-FLAGS = -std=c++11 -I$(HEADER_DIR) -lpthread -Wall
+COMPILE_FLAGS = -std=c++11 -I$(HEADER_DIR) -lpthread -Wall
 
 
 all: $(SOURCE)
-	$(CXX) -o $(TARGET) $^ $(FLAGS)
+	$(CXX) -o $(TARGET) $^ $(COMPILE_FLAGS)
 
 
 .PHONY: clean
 clean:
-	rm -rf $(TARGET)
+	rm -f $(TARGET)
