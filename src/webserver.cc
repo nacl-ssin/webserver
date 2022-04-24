@@ -87,31 +87,31 @@ void Webserver::accept_cb() {
         LOG_WARRING("accept_cb client failed! cause: ", strerror(errno));
         return;
     }
-    LOG_INFO("get a new client fd = %d", cfd);
+    LOG_INFO("accept a new client fd = %d", cfd);
 
     _ioc.add_event(cfd, EPOLLIN);
     _connects.insert(std::make_pair(cfd, HttpConnect(cfd, origin_addr)));
 }
 
 void Webserver::recv_cb(int fd) {
-    LOG_INFO("recv from client message fd = %d", fd);
+    LOG_INFO("recv from fd = %d client message", fd);
 	// 读取数据
 	ssize_t nread = _connects[fd].read();
 
-	_connects[fd].write();
-	//if (nread <= 0) {
-	//	error_cb(fd);
-	//}
-
-	error_cb(fd);
+	if (nread <= 0) {
+		error_cb(fd);
+	} else {
+		_connects[fd].write();
+	}
 }
 
-
+// ERROR
 void Webserver::error_cb(int fd) {
 	// 删除连接
 	LOG_INFO("client quit server name = %s", _connects[fd].server_name().c_str());
     _connects.erase(fd);
-	_ioc.cancel(fd);
+	bool ret = _ioc.cancel(fd);
+	LOG_INFO("quit ret = %d", ret);
 	close(fd);
 }
 

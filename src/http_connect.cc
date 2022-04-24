@@ -5,26 +5,25 @@
 #include "http_connect.h"
 
 
-//const std::string HttpConnect::RESOURCE_ROOT = "../static";
-const std::string HttpConnect::RESOURCE_ROOT = "/home/nacl/remote_proj/clion/webserver/static";
+const std::string HttpConnect::RESOURCE_ROOT = "../static";
+
 
 HttpConnect::HttpConnect() : _fd(-1), _addr() {
 
 }
 
+
 HttpConnect::HttpConnect(int sock, sockaddr_in addr) : _fd(sock), _addr(addr) {
 
 }
 
-int HttpConnect::get_fd() const {
-	return _fd;
-}
 
 std::string HttpConnect::server_name() {
 	std::string ip(16, 0);
 	inet_ntop(AF_INET, &_addr.sin_addr.s_addr, &ip[0], 16);
 	return ip;
 }
+
 
 ssize_t HttpConnect::read() {
 	char buf[1024] = {0};
@@ -40,14 +39,13 @@ ssize_t HttpConnect::read() {
 		return nread;
 	}
 	buf[nread] = 0;
-	parse_data(buf);
+	_request.parse(buf);
 	return nread;
 }
 
 
 void HttpConnect::write() {
 	_response._version = _request._version;
-
 	LOG_INFO("request path = %s", _request._path.c_str());
 
 	// 是否打开了文件
@@ -59,51 +57,47 @@ void HttpConnect::write() {
 	std::string path = RESOURCE_ROOT + _request._path;
 	// 获取文件属性
 	struct stat st = {};
-	if (stat(path.c_str(), &st) != 0) {
-		// 路径不存在
+	int ret = stat(path.c_str(), &st);
+
+	if (ret == -1 || S_ISDIR(st.st_mode)) {
+		// 这是一个目录 or 路径不存在都是Not Found
+		if (_request._path == "/") {
+			// 默认访问index.html
+			_request._path = "/index.html";
+			// 获取主页文件属性
+			stat((RESOURCE_ROOT + _request._path).c_str(), &st);
+			goto RD_FILE;
+		}
 		LOG_ERROR("stat error, cause: %s", strerror(errno));
-		_response._code = std::to_string(404);
-		_response._code_msg = "Not Found";
+		_response.set_response_line(404, "Not Found");
 		_response._body = _request._path + " Not Found!";
 		_response.set_header("Content-Length", _response._body.size());
 	} else {
 		// 检测是什么资源
-		if (S_ISDIR(st.st_mode)) {
-			// 这是一个目录
-			if (_request._path == "/") {
-				_request._path = "/index.html";
-				goto RD_FILE;
-			}
-			_response._code = std::to_string(404);
-			_response._code_msg = "Not Found";
-			_response._body = _request._path + " Not Found!";
-			_response.set_header("Content-Length", _response._body.size());
-		} else if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) {
+		if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) {
 			// 是一个可执行文件，特殊处理
-
+			cgi_handler();
 		} else {
 			// 是一个文件，打开文件准备响应正文
 			RD_FILE:
 			fd = open((RESOURCE_ROOT + _request._path).c_str(), O_RDONLY);
 			if (fd >= 0) {
-				_response._code = std::to_string(200);
-				_response._code_msg = "OK";
+				_response.set_response_line(200, "OK");
 				_response.set_header("Content-Type", file_type(_request._path.substr(_request._path.rfind('.') + 1)));
 				_response.set_header("Content-Length", st.st_size);
 				is_open = true;
 			} else {
 				// 文件打开失败
 				LOG_INFO("open [%s] error!, cause: %s", (RESOURCE_ROOT + _request._path).c_str(), strerror(errno));
-				_response._code = std::to_string(500);
-				_response._code_msg = "server error";
+				_response.set_response_line(500, "Server Error!");
 				_response._body = "server failed!";
 				_response.set_header("Content-Length", _response._body.size());
 			}
 		}
 	}
 
-	std::string res = build_response();
-	// 先发送响应行、报头、空行
+	std::string res = _response.build();
+	// 发送响应行、报头、空行
 	send(_fd, res.c_str(), res.size(), 0);
 
 	LOG_INFO("response = %s", res.c_str());
@@ -114,72 +108,114 @@ void HttpConnect::write() {
 		sendfile(_fd, fd, nullptr, st.st_size);
 		close(fd);
 	}
+	_response._header.clear();
 }
 
 
-void HttpConnect::parse_data(const std::string &str) {
-	std::string line;
-	size_t pos = 0;
-	while (pos < str.size()) {
-		auto p = read_line(str, pos);
-		line = p.first;
-		LOG_INFO("line = %s", line.c_str());
-		if (pos == 0) {
-			// 解析请求行
-			std::stringstream ss(line);
-			ss >> _request._method >> _request._path >> _request._version;
-			// 将请求地址和参数分离，如果有的话
-			auto v = split(_request._path, "?");
-			_request._path = v[0];
-			if (v.size() > 1) {
-				_request._query = v[1];
+void HttpConnect::cgi_handler() {
+	// 可执行程序路径
+	std::string exec_path = RESOURCE_ROOT + _request._path;
+	LOG_INFO("cgi proc path: %s", exec_path.c_str());
+
+	// 创建管道用于父子进程通信，程序替换不会替换内核中的数据结构，比如文件描述符数据
+	int in[2] = {0};
+	int out[2] = {0};
+
+	if (pipe(in) != 0) {
+		LOG_ERROR("pipe error, cause: %s", strerror(errno));
+	}
+	if (pipe(out) != 0) {
+		LOG_ERROR("pipe error, cause: %s", strerror(errno));
+	}
+
+	// 将要向管道写入的参数
+	std::string params;
+	if (_request._method == "POST") {
+		params = _request._body;
+	} else {
+		params = _request._query;
+	}
+
+	// 通过创建子进程来执行cgi程序
+	pid_t pid = fork();
+
+	if (pid == 0) {
+		// 子进程
+		close(in[1]);
+		close(out[0]);
+
+		std::string len = "CONTENT_LEN=" + std::to_string(params.size());
+		putenv(const_cast<char*>(len.c_str()));
+
+		// 使用dup2将子进程的输入输出，重定向到管道
+		dup2(in[0], 0);
+		dup2(out[1], 1);
+
+
+		// 使用程序替换执行cgi程序
+		execl(exec_path.c_str(), _request._path.c_str(), nullptr);
+
+		LOG_ERROR("execl error, cause: %s", strerror(errno));
+		exit(0);
+	} else if (pid > 0) {
+		// 父进程
+		close(in[0]);
+		close(out[1]);
+
+		// 向子进程中写入数据，也就是写入管道
+
+		LOG_INFO("wait proc quit");
+		std::size_t pos = 0;
+		while (pos < params.size()) {
+			ssize_t nwr = ::write(in[1], params.c_str() + pos, params.size());
+			if (nwr > 0) {
+				pos += nwr;
+			} else {
+				LOG_ERROR("write to proc error");
+				break;
+			}
+		}
+
+		// 从子进程中读取数据
+
+		char buf[128] = {0};
+		while (true) {
+			ssize_t nrd = ::read(out[0], buf, sizeof(buf) - 1);
+			LOG_INFO("nrd = %d", nrd);
+			if (nrd <= 0) {
+				break;
+			}
+			_response._body += buf;
+		}
+
+		// 等待子进程退出
+		LOG_INFO("wait proc quit");
+		int status = 0;
+		waitpid(pid, &status, WNOWAIT);
+
+		// 检测子进程是否正常执行完毕
+		if (WIFEXITED(status)) {
+			if (WEXITSTATUS(status) == 0) {
+				LOG_INFO("proc normal quit!");
+				_response.set_response_line(200, "OK");
+				_response.set_header("Content-Length", _response._body.size());
+			} else {
+				LOG_INFO("proc failed quit!");
+				_response.set_response_line(500, "Server Error!");
+				_response._body = "Server Error!";
+				_response.set_header("Content-Length", _response._body.size());
 			}
 		} else {
-			// 解析请求头
-			std::vector<std::string> ret = split(line, ": ");
-			if (ret.size() == 2) {
-				_request._header.emplace_back(std::make_pair(ret[0], ret[1]));
-			}
+			LOG_INFO("proc get a sig!");
+			_response.set_response_line(500, "Server Error!");
+			_response._body = "Server Error!";
+			_response.set_header("Content-Length", _response._body.size());
 		}
-		pos = p.second + 1;
-
-		if (line.empty()) {
-			// 到了请求正文了
-			p = read_line(str, pos);
-			_request._body = p.first;
-			LOG_INFO("request body = %s", p.first.c_str());
-			pos = p.second + 1;
-		}
+	} else {
+		// error
+		LOG_ERROR("fork error, cause: %s", strerror(errno));
 	}
-
-	LOG_INFO("parse data ending...");
-
-	//LOG_INFO("method = %s url = %s version = %s", _request._method.c_str(), _request._path.c_str(),
-	//		 _request._version.c_str());
-	//
-	//for (auto &p : _request._header) {
-	//	LOG_INFO("key = %s, val = %s", p.first.c_str(), p.second.c_str());
-	//}
 }
-
-
-std::string HttpConnect::build_response() {
-	std::stringstream ss;
-	// 响应行
-	ss << _response._version << " " << _response._code << " " << _response._code_msg << "\n";
-	// 响应头
-	for (auto &p : _response._header) {
-		ss << p.first << ": " << p.second << "\n";
-	}
-	// 响应空行
-	ss << "\n";
-	// 响应正文
-	ss << _response._body;
-	return ss.str();
-}
-
-
-
 
 
 

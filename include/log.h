@@ -25,7 +25,7 @@ enum class Level : char {
 #define LOG_FATAL(format, ...) log(format, level_str(Level::FATAL), __FILE__, __LINE__, ##__VA_ARGS__)
 
 
-void log(const std::string format, const std::string level, const std::string file, int line, ...);
+void log(const std::string& format, const std::string& level, const std::string& file, int line, ...);
 
 
 const char *level_str(Level level);

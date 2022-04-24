@@ -5,7 +5,6 @@
 #ifndef WEBSERVER_HTTP_CONNECTION_H
 #define WEBSERVER_HTTP_CONNECTION_H
 
-#include <sstream>
 #include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -13,9 +12,8 @@
 #include <sys/stat.h>
 #include <sys/fcntl.h>
 #include <sys/sendfile.h>
+#include <sys/wait.h>
 #include "protocol.h"
-#include "utils.h"
-#include "log.h"
 
 class HttpConnect {
 private:
@@ -24,12 +22,11 @@ private:
     HttpRequest _request;
     HttpResponse _response;
 	static const std::string RESOURCE_ROOT;
+
 public:
 	HttpConnect();
 
     HttpConnect(int sock, sockaddr_in addr);
-
-    int get_fd() const;
 
 	/**
 	 * 获取客户端ip
@@ -47,17 +44,13 @@ public:
 	 * 发送数据
 	 */
     void write();
-private:
-    /**
-     * 解析请求报文
-     */
-    void parse_data(const std::string& str);
 
-    /**
-     * 构建响应字符串
-     * @return
-     */
-    std::string build_response();
+private:
+	/**
+	 * cgi处理
+	 */
+	void cgi_handler();
+
 };
 
 

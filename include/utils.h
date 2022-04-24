@@ -5,12 +5,15 @@
 #include <string>
 #include <cstdio>
 #include <ctime>
+#include <vector>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <vector>
+#include <unordered_map>
+
+
 
 /**
- * 获取系统当前时间
+ * 获取系统时间
  * @return
  */
 std::string cur_time();
@@ -31,3 +34,12 @@ std::pair<std::string, size_t> read_line(const std::string &src, size_t start);
  * @return
  */
 std::vector<std::string> split(const std::string &src, const std::string &rep);
+
+
+
+/**
+ * 根据文件后缀获取content-type
+ * @param suffix
+ * @return
+ */
+std::string file_type(const std::string &suffix);
