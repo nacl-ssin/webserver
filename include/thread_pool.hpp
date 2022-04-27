@@ -14,6 +14,8 @@
 #include <iostream>
 #include <functional>
 #include <condition_variable>
+#include "log.h"
+
 
 class thread_pool {
 	using task_type = std::function<void()>;
@@ -25,76 +27,74 @@ public:
 	// 线程池是否运行
 	std::atomic<bool> _running;
 	// 正在工作的线程数
-	std::atomic<size_t> _busy_thread_num;
+	std::atomic<std::size_t> _busy_thread_num;
 	// 活着的线程数
-	std::atomic<size_t> _alive_thread_num;
+	std::atomic<std::size_t> _alive_thread_num;
 	// 添加/取出任务互斥量
 	std::mutex _task_mtx;
 	// 任务队列为空的条件变量
 	std::condition_variable _empty_cond;
+
+
 public:
-	thread_pool() {
-		_running = true;
-		_busy_thread_num = 0;
-		_alive_thread_num = 0;
+	thread_pool() : _running(true), _busy_thread_num(0), _alive_thread_num(0) {
+
 	}
 
 	thread_pool(const thread_pool &) = delete;
 
-	thread_pool &operator=(const thread_pool &) = delete;
-
-	thread_pool(thread_pool &&rvalue) noexcept {
-		*this = std::forward<thread_pool &&>(rvalue);
-	}
+	thread_pool(thread_pool &&) = delete;
 
 	~thread_pool() {
-		destroy();
+		if (_running) {
+			destroy();
+		}
 	}
 
-	thread_pool &operator=(thread_pool &&rhs) noexcept {
-		_thread_list = std::move(rhs._thread_list);
-		_task_q = std::move(rhs._task_q);
-		_running.exchange(rhs._running);
-		_busy_thread_num.exchange(rhs._busy_thread_num);
-		_alive_thread_num.exchange(rhs._alive_thread_num);
-		return *this;
-	}
-
+public:
 	// add task
 	template<typename Callable, typename... Args>
 	auto push_task(Callable &&call, Args &&...args)->std::future<decltype(call(args...))> {
 		// deduce return type
 		using RetType = decltype(call(args...));
-		auto *task = new std::packaged_task<RetType()>(
+		auto task = std::make_shared<std::packaged_task<RetType()>>(
 				std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
 
-		std::unique_lock<std::mutex> lk(_task_mtx);
-		// add task
-		_task_q.push([task] {
-			(*task)();
-			delete task;
-		});
+		//auto *task = new std::packaged_task<RetType()>(std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
+		//LOG_INFO("push a task");
+
+		{
+			std::unique_lock<std::mutex> lk(_task_mtx);
+			// add task
+			_task_q.push([task] {
+				(*task)();
+			});
+		}
+
+		//LOG_INFO("push a task size = %d", _task_q.size());
 		_empty_cond.notify_one();
 		return task->get_future();
 	}
 
+
 	// init thread pool
-	void start(int create_num) {
-		for (int i = 0; i < create_num; ++i) {
+	void start(std::size_t create_num = std::thread::hardware_concurrency() * 10) {
+		//LOG_INFO("create num = %lu", create_num);
+		for (size_t i = 0; i < create_num; ++i) {
 			_thread_list.emplace_back(thread_pool::routine, this);
 		}
 		_alive_thread_num.fetch_add(create_num);
+		LOG_INFO("thread pool init success");
 	}
 
 	// thread destroy
 	void destroy() {
 		_running = false;
 		for (auto &t : _thread_list) {
-			std::thread::id id = t.get_id();
 			_empty_cond.notify_all();
 			if (t.joinable()) {
 				t.join();
-				std::cout << "jobs thread " << id << " exiting..." << std::endl;
+				LOG_INFO("jobs thread %lu exiting...", pthread_self());
 			}
 		}
 	}
@@ -108,6 +108,11 @@ public:
 	size_t alive_num() const {
 		return _alive_thread_num;
 	}
+
+public:
+	thread_pool &operator=(const thread_pool &) = delete;
+
+	thread_pool &operator=(const thread_pool &&) = delete;
 
 private:
 	// thread routine
@@ -125,13 +130,16 @@ private:
 					}
 				}
 				// get one task
-				task = pool->_task_q.front();
+				task = std::move(pool->_task_q.front());
 				pool->_task_q.pop();
 			}
+			//LOG_INFO("get a task");
 
 			++pool->_busy_thread_num;
+			//LOG_INFO("thread id = %lu running...", pthread_self());
 			task();
 			--pool->_busy_thread_num;
+			LOG_INFO("task run end");
 
 			// thread exit
 			if (!pool->_running) return;

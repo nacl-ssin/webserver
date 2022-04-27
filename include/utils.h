@@ -36,10 +36,3 @@ std::pair<std::string, size_t> read_line(const std::string &src, size_t start);
 std::vector<std::string> split(const std::string &src, const std::string &rep);
 
 
-
-/**
- * 根据文件后缀获取content-type
- * @param suffix
- * @return
- */
-std::string file_type(const std::string &suffix);

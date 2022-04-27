@@ -15,7 +15,7 @@
 #include <sys/wait.h>
 #include "protocol.h"
 
-class HttpConnect {
+class HttpConnection {
 private:
     int _fd;
     sockaddr_in _addr;
@@ -24,9 +24,9 @@ private:
 	static const std::string RESOURCE_ROOT;
 
 public:
-	HttpConnect();
+	HttpConnection();
 
-    HttpConnect(int sock, sockaddr_in addr);
+    HttpConnection(int sock, sockaddr_in addr);
 
 	/**
 	 * 获取客户端ip
@@ -38,12 +38,12 @@ public:
 	 * 读取数据
 	 * @return
 	 */
-    ssize_t read();
+    ssize_t receive();
 
 	/**
 	 * 发送数据
 	 */
-    void write();
+    void send();
 
 private:
 	/**

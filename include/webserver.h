@@ -6,15 +6,18 @@
 #define WEBSERVER_WEBSERVER_H
 
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unordered_map>
-#include "http_connect.h"
+#include "http_connection.h"
 #include "iocntl.h"
 #include "log.h"
 
+
+class thread_pool;
 
 class Webserver {
 	using port_t = unsigned short;
@@ -22,7 +25,8 @@ private:
 	int _lfd;
 	IOCntl _ioc;
 	port_t _port;
-	std::unordered_map<int, HttpConnect> _connects;
+	thread_pool *_tp;
+	std::unordered_map<int, HttpConnection> _connects;
 
 public:
 	explicit Webserver(port_t port);
@@ -43,19 +47,19 @@ private:
 	/**
 	 * 接收请求处理
 	 */
-	void accept_cb();
+	static void accept_cb(Webserver *ws);
 
 	/**
 	 * 响应回调
 	 * @param fd
 	 */
-	void recv_cb(int fd);
+	static void recv_cb(Webserver *ws, int fd);
 
 	/**
 	 * 出错回调
 	 * @param fd
 	 */
-	void error_cb(int fd);
+	static void error_cb(Webserver *ws, int fd);
 };
 
 

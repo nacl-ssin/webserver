@@ -22,11 +22,13 @@ protected:
 
 
 class HttpRequest : public HttpData {
-	friend class HttpConnect;
+	friend class HttpConnection;
 
 private:
 	std::string _path;                          /*请求路径*/
 	std::string _query;                         /*请求参数*/
+
+public:
 
 	/**
 	 * 解析请求报文
@@ -37,12 +39,13 @@ private:
 
 
 class HttpResponse : public HttpData {
-	friend class HttpConnect;
+	friend class HttpConnection;
 
 private:
 	std::string _code;                         /*响应状态码*/
 	std::string _code_msg;                     /*响应状态码描述*/
 
+public:
 	/**
 	 * 设置响应头
 	 * @param key
@@ -51,6 +54,8 @@ private:
 	void set_header(std::string key, std::size_t val);
 
 	void set_header(std::string key, std::string val);
+
+private:
 
 	/**
 	 * 设置响应行
@@ -62,11 +67,37 @@ private:
 
 	void set_response_line(int code, std::string code_msg);
 
+public:
+
+	/**
+	 * 设置响应正文和Content-Length
+	 * @param body
+	 */
+	void set_body(const std::string &body);
+
+	/**
+	 * 设置响应状态码+状态码描述
+	 * @param code
+	 */
+	void set_code(int code);
+
+
 	/**
 	 * 构建响应报文
 	 * @return
 	 */
 	std::string build();
 };
+
+
+
+/**
+ * 根据文件后缀获取content-type
+ * @param suffix
+ * @return
+ */
+std::string file_type(const std::string &suffix);
+
+
 
 #endif //WEBSERVER_PROTOCOL_H

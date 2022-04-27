@@ -13,7 +13,7 @@ void HttpRequest::parse(const std::string &request_str) {
 	while (pos < request_str.size()) {
 		auto p = read_line(request_str, pos);
 		line = p.first;
-		LOG_INFO("line = %s", line.c_str());
+		//LOG_INFO("line = %s", line.c_str());
 		if (pos == 0) {
 			// 解析请求行
 			std::stringstream ss(line);
@@ -27,6 +27,9 @@ void HttpRequest::parse(const std::string &request_str) {
 		} else {
 			// 解析请求头
 			std::vector<std::string> ret = split(line, ": ");
+			//for (auto &s : ret) {
+				//LOG_INFO("header = %s", s.c_str());
+			//}
 			if (ret.size() == 2) {
 				_header.emplace_back(std::make_pair(ret[0], ret[1]));
 			}
@@ -37,7 +40,7 @@ void HttpRequest::parse(const std::string &request_str) {
 			// 到了请求正文了
 			p = read_line(request_str, pos);
 			_body = p.first;
-			LOG_INFO("request body = %s", p.first.c_str());
+			//LOG_INFO("request body = %s", p.first.c_str());
 			pos = p.second + 1;
 		}
 	}
@@ -77,6 +80,31 @@ void HttpResponse::set_response_line(int code, std::string code_msg) {
 }
 
 
+void HttpResponse::set_body(const std::string &body) {
+	_body = body;
+	set_header("Content-Length", _body.size());
+}
+
+
+void HttpResponse::set_code(int code) {
+	const static std::unordered_map<int, std::string> CODE_MSG {
+			{200, "OK"},
+			{300, "Multiple Choices"},
+			{301, "Moved Permanently"},
+			{400, "Bad Request"},
+			{404, "Not Found"},
+			{500, "Internal Server Error"},
+			{501, "Not Implemented"},
+	};
+	auto iter = CODE_MSG.find(code);
+	if (iter != CODE_MSG.end()) {
+		set_response_line(code, iter->second);
+	} else {
+		set_response_line(code, "error");
+	}
+}
+
+
 std::string HttpResponse::build() {
 	std::stringstream ss;
 	// 响应行
@@ -93,3 +121,45 @@ std::string HttpResponse::build() {
 }
 
 
+
+
+
+
+//Other------------------------------------------------------------------------------------
+
+
+
+
+const static std::unordered_map<std::string, std::string> FILE_SUFFIX_MAPPED = {
+		{"html",  "text/html"},
+		{"htm",   "text/html"},
+		{"css",   "text/css"},
+		{"xml",   "application/xml"},
+		{"json",  "application/json"},
+		{"js",    "application/javascript"},
+		{"mpa",   "video/mpeg"},
+		{"png",   "image/png"},
+		{"jpeg",  "image/jpeg"},
+		{"woff2", "application/font-woff2"},
+		{"txt",   "text/plain"},
+		{"ppt",   "application/vnd.ms-powerpoint"},
+		{"pic",   "image/pict"},
+		{"body",  "text/html"},
+		{"tif",   "image/tiff"},
+		{"wbmp",  "image/vnd.wap.wbmp"},
+		{"svgz",  "image/svg+xml"},
+		{"woff",  "application/font-woff"},
+		{"gif",   "image/gif"},
+		{"jpg",   "image/jpeg"},
+		{"ttf",   "application/x-font-ttf"},
+		{"mp4",   "video/mp4"},
+		{"mp3",   "audio/mpeg"},
+		{"pdf",   "application/pdf"},
+		{"xls",   "application/vnd.ms-excel"}
+};
+
+
+std::string file_type(const std::string &suffix) {
+	auto iter = FILE_SUFFIX_MAPPED.find(suffix);
+	return iter == FILE_SUFFIX_MAPPED.end() ? "text/plain" : iter->second;
+}
