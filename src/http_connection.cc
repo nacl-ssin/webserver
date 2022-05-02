@@ -5,18 +5,15 @@
 #include "http_connection.h"
 
 
-//const std::string HttpConnection::RESOURCE_ROOT = "../static";
-const std::string HttpConnection::RESOURCE_ROOT = "/home/nacl/remote_proj/clion/webserver/static";
-//const std::string HttpConnection::RESOURCE_ROOT = "/root/webserver/static";
+const std::string HttpConnection::RESOURCE_ROOT = "./wwwroot";
 
 
-
-HttpConnection::HttpConnection() : _fd(-1), _addr() {
+HttpConnection::HttpConnection() : _fd(-1), _closed(false), _addr() {
 
 }
 
 
-HttpConnection::HttpConnection(int sock, sockaddr_in addr) : _fd(sock), _addr(addr) {
+HttpConnection::HttpConnection(int sock, sockaddr_in addr) : _fd(sock), _closed(false), _addr(addr) {
 
 }
 
@@ -42,14 +39,12 @@ ssize_t HttpConnection::receive() {
 	}
 	buf[nread] = 0;
 	_request.parse(buf);
+	_response._version = _request._version;
 	return nread;
 }
 
 
-void HttpConnection::send() {
-	_response._version = _request._version;
-	//LOG_INFO("request path = %s", _request._path.c_str());
-
+void HttpConnection::send_file() {
 	// 是否打开了文件
 	bool is_open = false;
 	// 文件描述符
@@ -71,8 +66,8 @@ void HttpConnection::send() {
 			goto RD_FILE;
 		}
 		LOG_ERROR("stat error, cause: %s", strerror(errno));
-		_response.set_code(404);
-		_response.set_body(_request._path + " Not Found!");
+		_response.set_code(404)
+				.set_body(_request._path + " Not Found!");
 	} else {
 		// 检测是什么资源
 		if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) {
@@ -83,42 +78,45 @@ void HttpConnection::send() {
 			RD_FILE:
 			fd = open((RESOURCE_ROOT + _request._path).c_str(), O_RDONLY);
 			if (fd >= 0) {
-				_response.set_code(200);
-				//_response._header.emplace_back("Content-Type", file_type(_request._path.substr(_request._path.rfind('.') + 1)));
-				//_response._header.emplace_back("Content-Length", std::to_string(st.st_size));
-				_response.set_header("Content-Type", file_type(_request._path.substr(_request._path.rfind('.') + 1)));
-				_response.set_header("Content-Length", st.st_size);
+				_response.set_code(200)
+						.set_header("Content-Type", file_type(_request._path.substr(_request._path.rfind('.') + 1)))
+						.set_header("Content-Length", st.st_size);
 				is_open = true;
 			} else {
 				// 文件打开失败
 				LOG_INFO("open [%s] error!, cause: %s", (RESOURCE_ROOT + _request._path).c_str(), strerror(errno));
-				_response.set_code(500);
-				_response.set_body("Server Failed!");
+				_response.set_code(500)
+						.set_body("Server Failed!");
 			}
 		}
 	}
 
-	std::string res = _response.build();
-	 //发送响应行、报头、空行
-	::send(_fd, res.c_str(), res.size(), 0);
-	//LOG_INFO("send ok");
-	//int n = ::send(_fd, "HTTP/1.0 200 OK\nContent-Legnth: 2\n\nOK", 37, 0);
-	//LOG_INFO("send n = %d", n);
-	//
-	//LOG_INFO("send end");
-	//LOG_INFO("response = %s", res.c_str());
 
+	//发送响应行、报头、空行
+	send();
 	// 文件打开成功！
 	// 改接口可以直接将文件的数据直接拷贝到网卡缓冲区中，就不用先拷贝到用户缓冲区，然后再拷贝至网卡缓冲区，少了一次拷贝
 	if (is_open) {
 		sendfile(_fd, fd, nullptr, st.st_size);
-		close(fd);
+		::close(fd);
 	}
+}
 
+
+void HttpConnection::send() {
+	std::string res = _response.build();
+	//LOG_INFO("res = %s", res.c_str());
+	::send(_fd, res.c_str(), res.size(), 0);
 	_response._header.clear();
 	_response._body.clear();
 }
 
+
+void HttpConnection::send_error() {
+	_response.set_code(404);
+	_response.set_body(_request._path +" Not Found");
+	send();
+}
 
 void HttpConnection::cgi_handler() {
 	// 可执行程序路径
@@ -149,8 +147,8 @@ void HttpConnection::cgi_handler() {
 
 	if (pid == 0) {
 		// 子进程
-		close(in[1]);
-		close(out[0]);
+		::close(in[1]);
+		::close(out[0]);
 
 		std::string len = "CONTENT_LEN=" + std::to_string(params.size());
 		putenv(const_cast<char *>(len.c_str()));
@@ -167,8 +165,8 @@ void HttpConnection::cgi_handler() {
 		exit(0);
 	} else if (pid > 0) {
 		// 父进程
-		close(in[0]);
-		close(out[1]);
+		::close(in[0]);
+		::close(out[1]);
 
 		// 向子进程中写入数据，也就是写入管道
 
@@ -179,7 +177,7 @@ void HttpConnection::cgi_handler() {
 			if (nwr > 0) {
 				pos += nwr;
 			} else {
-				LOG_ERROR("send to proc error");
+				LOG_ERROR("send_file to proc error");
 				break;
 			}
 		}
@@ -205,23 +203,28 @@ void HttpConnection::cgi_handler() {
 		if (WIFEXITED(status)) {
 			if (WEXITSTATUS(status) == 0) {
 				LOG_INFO("proc normal quit!");
-				_response.set_code(200);
-				_response.set_header("Content-Length", _response._body.size());
+				_response.set_code(200)
+						.set_header("Content-Length", _response._body.size());
 			} else {
 				LOG_INFO("proc failed quit!");
-				_response.set_code(500);
-				_response.set_body("Server Failed!");
+				_response.set_code(500)
+						.set_body("Server Failed!");
 			}
 		} else {
 			LOG_INFO("proc get a sig!");
-			_response.set_code(500);
-			_response.set_body("Server Failed!");
+			_response.set_code(500)
+					.set_body("Server Failed!");
 		}
 	} else {
 		// error
 		LOG_ERROR("fork error, cause: %s", strerror(errno));
 	}
 }
+
+
+
+
+
 
 
 

@@ -14,10 +14,10 @@
 
 struct HttpData {
 protected:
-	std::string _method;    /*方法*/
-	std::string _version;   /*版本*/
+	std::string _method;    									/*方法*/
+	std::string _version;   									/*版本*/
 	std::vector<std::pair<std::string, std::string>> _header;   /*请求头*/
-	std::string _body;      /*正文*/
+	std::string _body;      									/*正文*/
 };
 
 
@@ -25,8 +25,9 @@ class HttpRequest : public HttpData {
 	friend class HttpConnection;
 
 private:
-	std::string _path;                          /*请求路径*/
-	std::string _query;                         /*请求参数*/
+	std::string _path;                           			    /*请求路径*/
+	std::string _query;										    /*请求参数*/
+	std::vector<std::pair<std::string, std::string>> _params;   /*解析后的请求参数*/
 
 public:
 
@@ -35,12 +36,24 @@ public:
 	 * @param request_str
 	 */
 	void parse(const std::string &request_str);
+
+	/**
+	 * 获取请求路径
+	 * @return
+	 */
+	std::string &get_path();
+
+	/**
+	 * 获取请求参数
+	 * @param key
+	 * @return
+	 */
+	std::string get_params(const std::string &key);
 };
 
 
 class HttpResponse : public HttpData {
 	friend class HttpConnection;
-
 private:
 	std::string _code;                         /*响应状态码*/
 	std::string _code_msg;                     /*响应状态码描述*/
@@ -51,9 +64,9 @@ public:
 	 * @param key
 	 * @param val
 	 */
-	void set_header(std::string key, std::size_t val);
+	HttpResponse &set_header(std::string key, std::size_t val);
 
-	void set_header(std::string key, std::string val);
+	HttpResponse &set_header(std::string key, std::string val);
 
 private:
 
@@ -63,9 +76,9 @@ private:
 	 * @param code
 	 * @param code_msg
 	 */
-	void set_response_line(std::string version, int code, std::string code_msg);
+	HttpResponse &set_response_line(std::string version, int code, std::string code_msg);
 
-	void set_response_line(int code, std::string code_msg);
+	HttpResponse &set_response_line(int code, std::string code_msg);
 
 public:
 
@@ -73,13 +86,14 @@ public:
 	 * 设置响应正文和Content-Length
 	 * @param body
 	 */
-	void set_body(const std::string &body);
+	HttpResponse &set_body(const std::string &body);
 
 	/**
 	 * 设置响应状态码+状态码描述
 	 * @param code
 	 */
-	void set_code(int code);
+	HttpResponse &set_code(int code);
+
 
 
 	/**

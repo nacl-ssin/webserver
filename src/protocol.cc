@@ -1,13 +1,11 @@
 //
-// Created by 26372 on 2022/4/17.
-//
 
 #include "protocol.h"
 
 // Request--------------------------------------------------------------------------------
 
-
 void HttpRequest::parse(const std::string &request_str) {
+	LOG_INFO("request str = %s", request_str.c_str());
 	std::string line;
 	size_t pos = 0;
 	while (pos < request_str.size()) {
@@ -17,7 +15,10 @@ void HttpRequest::parse(const std::string &request_str) {
 		if (pos == 0) {
 			// 解析请求行
 			std::stringstream ss(line);
+			//LOG_INFO("line = %s", line.c_str());
 			ss >> _method >> _path >> _version;
+			_method = to_upper(_method);
+			//LOG_INFO("method = %s", _method.c_str());
 			// 将请求地址和参数分离，如果有的话
 			auto v = split(_path, "?");
 			_path = std::move(v[0]);
@@ -45,6 +46,25 @@ void HttpRequest::parse(const std::string &request_str) {
 		}
 	}
 
+	// 解析参数
+	std::string params;
+	if (_method == "POST") {
+		params = _body;
+	} else {
+		params = _query;
+	}
+
+	auto ret = split(params, "&");
+	if (!ret.empty()) {
+		for (auto &str : ret) {
+			auto kv = split(str, "=");
+			if (kv.size() == 2) {
+				_params.emplace_back(kv[0], kv[1]);
+			}
+		}
+	}
+
+
 	LOG_INFO("parse data ending...");
 
 	//LOG_INFO("method = %s url = %s version = %s", _request._method.c_str(), _request._path.c_str(),
@@ -56,37 +76,64 @@ void HttpRequest::parse(const std::string &request_str) {
 }
 
 
+std::string &HttpRequest::get_path() {
+	return _path;
+}
+
+
+std::string HttpRequest::get_params(const std::string &key) {
+	for (auto &p : _params) {
+		if (p.first == key) {
+			return p.second;
+		}
+	}
+	return "";
+}
+
+
+
+
+
+
+
+
 // Response--------------------------------------------------------------------------------
 
-void HttpResponse::set_header(std::string key, std::size_t val) {
+HttpResponse &HttpResponse::set_header(std::string key, std::size_t val) {
 	_header.emplace_back(std::move(key), std::to_string(val));
+	return *this;
 }
 
 
-void HttpResponse::set_header(std::string key, std::string val) {
+HttpResponse &HttpResponse::set_header(std::string key, std::string val) {
 	_header.emplace_back(std::move(key), std::move(val));
+	return *this;
 }
 
 
-void HttpResponse::set_response_line(std::string version, int code, std::string code_msg) {
+HttpResponse &HttpResponse::set_response_line(std::string version, int code, std::string code_msg) {
 	_version = std::move(version);
 	_code = std::to_string(code);
 	_code_msg = std::move(code_msg);
+	return *this;
 }
 
 
-void HttpResponse::set_response_line(int code, std::string code_msg) {
+HttpResponse &HttpResponse::set_response_line(int code, std::string code_msg) {
 	set_response_line("HTTP/1.0", code, std::move(code_msg));
+	return *this;
 }
 
 
-void HttpResponse::set_body(const std::string &body) {
+HttpResponse &HttpResponse::set_body(const std::string &body) {
 	_body = body;
 	set_header("Content-Length", _body.size());
+	set_header("Content-Type", "text/plain");
+	return *this;
 }
 
 
-void HttpResponse::set_code(int code) {
+HttpResponse &HttpResponse::set_code(int code) {
 	const static std::unordered_map<int, std::string> CODE_MSG {
 			{200, "OK"},
 			{300, "Multiple Choices"},
@@ -102,8 +149,9 @@ void HttpResponse::set_code(int code) {
 	} else {
 		set_response_line(code, "error");
 	}
-}
 
+	return *this;
+}
 
 std::string HttpResponse::build() {
 	std::stringstream ss;
@@ -119,6 +167,7 @@ std::string HttpResponse::build() {
 	ss << _body;
 	return ss.str();
 }
+
 
 
 

@@ -54,7 +54,7 @@ void test2() {
 }
 
 void test3() {
-	int fd = open("../static/index.html", O_RDONLY);
+	int fd = open("../wwwroot/index.html", O_RDONLY);
 	std::cout << "fd = " << fd << std::endl;
 }
 

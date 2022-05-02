@@ -21,7 +21,6 @@ std::vector<std::string> split(const std::string &src, const std::string &rep) {
 }
 
 
-
 int main() {
 	int len = atoi(getenv("CONTENT_LEN"));
 
@@ -31,32 +30,21 @@ int main() {
 
 	buf[nrd] = 0;
 
-	std::cerr << "buf: " << buf << std::endl;
-	std::cerr << "len: " << len << std::endl;
+	//std::cerr << "buf: " << buf << std::endl;
+	//std::cerr << "len: " << len << std::endl;
 	std::vector<std::string> ret = split(buf, "&");
-	std::vector<int> nums;
 
+	std::string result;
 
-	
 	for (auto &s : ret) {
-		std::cerr << "item = " << s << std::endl;
 		std::vector<std::string> v = split(s, "=");
 		if (v.size() == 2) {
-			std::cerr << v[0] << ", " << v[1] << std::endl;
-			nums.push_back(stoi(v[1]));
+			result += v[0] + ": " + v[1] + "\n";
 		}
 	}
 
-	int sum;
-	for (auto e : nums) {
-		sum += e;
-	}
-
-	std::string result = "Result: " + std::to_string(sum);
-
-	ssize_t nwr = write(1, result.c_str(), result.size());
-
-	std::cerr << "nwr = " << nwr << std::endl;
+	// 向管道中写入
+	write(1, result.c_str(), result.size());
 
 	return 0;
 }

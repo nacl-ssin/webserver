@@ -3,6 +3,7 @@
 //
 
 #include "webserver.h"
+
 #include "thread_pool.hpp"
 
 Webserver::Webserver(Webserver::port_t port) : _lfd(-1), _port(port), _tp(nullptr) {
@@ -50,13 +51,23 @@ void Webserver::init_server() {
 		LOG_ERROR("thread pool create error!");
 		exit(3);
 	}
-	_tp->start(5);
+	_tp->start();
 	// 忽略掉SIGPIPE信号
 
 	//for (int i = 1; i < 32; ++i) {
 	signal(SIGPIPE, SIG_IGN);
 	//}
 	LOG_INFO("server start on 8080 port");
+}
+
+
+void Webserver::get(const std::string &url, Webserver::request_trigger trigger) {
+	_events_map["GET:" + url] = std::move(trigger);
+}
+
+
+void Webserver::post(const std::string &url, Webserver::request_trigger trigger) {
+	_events_map["POST:" + url] = std::move(trigger);
 }
 
 
@@ -77,18 +88,16 @@ void Webserver::init_server() {
 			}
 
 			if (ev.data.fd != _lfd && (ev.events & EPOLLIN)) {
-				int fd = ev.data.fd;
-				_tp->push_task(recv_cb, this, fd);
+				_tp->push_task(recv_cb, this, static_cast<int>(ev.data.fd));
 				//recv_cb(this, ev.data.fd);
 			}
 
-			//if (ev.events & EPOLLHUP) {
-			//	LOG_WARRING("error");
-			//    // 出错
-			//	int fd = ev.data.fd;
-			//	_tp->push_task(error_cb, this, fd);
-			//	//error_cb(this, ev.data.fd);
-			//}
+			if (ev.events & EPOLLHUP) {
+				LOG_WARRING("error");
+				// 出错
+				//_tp->push_task(error_cb, this, ev.data.fd);
+				_tp->push_task(error_cb, this, static_cast<int>(ev.data.fd));
+			}
 		}
 	}
 }
@@ -106,8 +115,8 @@ void Webserver::accept_cb(Webserver *ws) {
 	LOG_INFO("accept a new client fd = %d", cfd);
 
 	ws->_ioc.add_event(cfd, EPOLLIN | EPOLLET);
-	ws->_connects.insert(std::make_pair(cfd, HttpConnection(cfd, origin_addr)));
-	LOG_INFO("accept end");
+	ws->_connects[cfd] = HttpConnection(cfd, origin_addr);
+	//LOG_INFO("accept end");
 }
 
 
@@ -120,22 +129,38 @@ void Webserver::recv_cb(Webserver *ws, int fd) {
 		LOG_WARRING("nread = %d", nread);
 		error_cb(ws, fd);
 	} else {
-		ws->_connects[fd].send();
+		// 是文件资源还是服务资源
+		LOG_INFO("closed = %d", ws->_connects[fd].is_close());
+
+		if (!ws->_connects[fd].is_close()) {
+			if (access(ws->_connects[fd].full_file_path().c_str(), F_OK) == 0) {
+				// 存在文件资源
+				ws->_connects[fd].send_file();
+			} else {
+				// 服务资源
+				std::string url = ws->_connects[fd].get_method() + ":" + ws->_connects[fd].get_path();
+				if (ws->_events_map.find(url) != ws->_events_map.end()) {
+					(ws->_events_map[url])(ws->_connects[fd]._request, ws->_connects[fd]._response);
+					ws->_connects[fd].send();
+				} else {
+					ws->_connects[fd].send_error();
+				}
+			}
+		} else {
+			LOG_INFO("closed");
+		}
 	}
-	LOG_INFO("recv end");
+	//LOG_INFO("recv end");
 }
 
 
 // ERROR
 void Webserver::error_cb(Webserver *ws, int fd) {
-	LOG_ERROR("error fd = %d", fd);
-	// 删除连接
-	// 不删出连接，下一次来连接，直接覆盖
-
+	// 关闭连接
+	ws->_connects[fd].close();
 	ws->_ioc.cancel(fd);
-	//LOG_INFO("quit ret = %d", ret);
-	close(fd);
-	LOG_INFO("error end");
+	LOG_INFO("server name = %s, fd = %d quit!", ws->_connects[fd].server_name().c_str(), fd);
 }
+
 
 

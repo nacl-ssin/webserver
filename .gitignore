@@ -1,4 +1,5 @@
-static/cgi_proc
+wwwroot/cgi_proc
 webserver
 cmake-build-debug
 .clion.source.upload.marker
+nohup.out

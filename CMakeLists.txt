@@ -11,3 +11,5 @@ add_executable(webserver main.cpp ${SOURCE_FILES})
 
 # 链接pthread库
 target_link_libraries(webserver pthread)
+
+target_link_libraries(webserver mysqlclient)

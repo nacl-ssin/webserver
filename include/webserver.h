@@ -11,9 +11,10 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <functional>
 #include <unordered_map>
 #include "http_connection.h"
-#include "iocntl.h"
+#include "epoller.h"
 #include "log.h"
 
 
@@ -21,12 +22,15 @@ class thread_pool;
 
 class Webserver {
 	using port_t = unsigned short;
+	using request_trigger = std::function<void(HttpRequest &, HttpResponse &)>;
+
 private:
 	int _lfd;
-	IOCntl _ioc;
+	Epoller _ioc;
 	port_t _port;
 	thread_pool *_tp;
 	std::unordered_map<int, HttpConnection> _connects;
+	std::unordered_map<std::string, request_trigger> _events_map;
 
 public:
 	explicit Webserver(port_t port);
@@ -42,6 +46,12 @@ public:
 	 * 进行事件分发
 	 */
 	[[noreturn]] void dispatch();
+
+
+	void get(const std::string &url, request_trigger trigger);
+
+
+	void post(const std::string &url, request_trigger trigger);
 
 private:
 	/**

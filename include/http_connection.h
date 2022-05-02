@@ -16,8 +16,10 @@
 #include "protocol.h"
 
 class HttpConnection {
+	friend class Webserver;
 private:
     int _fd;
+	bool _closed;
     sockaddr_in _addr;
     HttpRequest _request;
     HttpResponse _response;
@@ -43,15 +45,62 @@ public:
 	/**
 	 * 发送数据
 	 */
-    void send();
+    void send_file();
 
+	/**
+	 * 构建响应报文发送
+	 */
+	void send();
+
+	/**
+	 * 未知的资源
+	 */
+	void send_error();
+
+	/**
+	 * 关闭连接
+	 */
+	inline void close() {
+		_closed = true;
+		::close(_fd);
+	}
+
+	/**
+	 * 是否关闭对象
+	 * @return
+	 */
+	inline bool is_close() const {
+		return _closed;
+	}
+
+	/**
+	 * 获取请求方法
+	 * @return
+	 */
+	inline std::string &get_method() {
+		return _request._method;
+	}
+
+
+	inline std::string &get_path() {
+		return _request._path;
+	}
+
+
+	/**
+	 * 完整的资源路径
+	 * @return
+	 */
+	inline std::string full_file_path() {
+		return HttpConnection::RESOURCE_ROOT + _request._path;
+	}
 private:
 	/**
 	 * cgi处理
 	 */
 	void cgi_handler();
-
 };
+
 
 
 #endif //WEBSERVER_HTTP_CONNECTION_H

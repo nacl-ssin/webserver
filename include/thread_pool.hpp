@@ -60,7 +60,6 @@ public:
 		auto task = std::make_shared<std::packaged_task<RetType()>>(
 				std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
 
-		//auto *task = new std::packaged_task<RetType()>(std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
 		//LOG_INFO("push a task");
 
 		{
@@ -84,7 +83,7 @@ public:
 			_thread_list.emplace_back(thread_pool::routine, this);
 		}
 		_alive_thread_num.fetch_add(create_num);
-		LOG_INFO("thread pool init success");
+		LOG_INFO("thread pool init success num = %d", create_num);
 	}
 
 	// thread destroy

@@ -2,23 +2,23 @@
 // Created by 26372 on 2022/4/18.
 //
 
-#ifndef WEBSERVER_IOCNTL_H
-#define WEBSERVER_IOCNTL_H
+#ifndef WEBSERVER_EPOLLER_H
+#define WEBSERVER_EPOLLER_H
 
-#include <iocntl.h>
+#include <epoller.h>
 #include <vector>
 #include <unistd.h>
 #include <sys/epoll.h>
 
-class IOCntl {
+class Epoller {
 private:
     int _epollfd;
     std::vector<epoll_event> _evs;
 
 public:
-    IOCntl();
+    Epoller();
 
-    ~IOCntl();
+    ~Epoller();
 
     /**
      * 添加io检测
@@ -56,4 +56,4 @@ public:
 };
 
 
-#endif //WEBSERVER_IOCNTL_H
+#endif //WEBSERVER_EPOLLER_H

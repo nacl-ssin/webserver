@@ -54,6 +54,15 @@ std::vector<std::string> split(const std::string &src, const std::string &rep) {
 	return ret;
 }
 
+std::string to_upper(std::string &str) {
+	std::string ret;
+	ret.reserve(str.size());
+	for (auto c : str) {
+		ret.push_back(toupper(c));
+	}
+	return ret;
+}
+
 
 
 

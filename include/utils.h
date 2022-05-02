@@ -36,3 +36,9 @@ std::pair<std::string, size_t> read_line(const std::string &src, size_t start);
 std::vector<std::string> split(const std::string &src, const std::string &rep);
 
 
+
+/**
+ * 将字符串变为大写
+ * @param str
+ */
+std::string to_upper(std::string &str);

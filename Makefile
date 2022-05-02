@@ -4,7 +4,7 @@ CXX = g++
 SOURCE = src/*.cc main.cpp
 HEADER_DIR = include/
 
-COMPILE_FLAGS = -std=c++11 -I$(HEADER_DIR) -lpthread -Wall
+COMPILE_FLAGS = -std=c++11 -I$(HEADER_DIR) -lpthread -lmysqlclient -Wall
 
 
 all: $(SOURCE)
