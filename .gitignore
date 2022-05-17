@@ -3,3 +3,4 @@ webserver
 cmake-build-debug-hesc
 .clion.source.upload.marker
 nohup.out
+wwwroot/video
