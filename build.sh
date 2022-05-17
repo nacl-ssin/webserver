@@ -1,8 +1,6 @@
 #!/usr/bin/bash
 
-g++ -o cgi/cgi_proc cgi/cgi_proc.cc -std=c++11
-
-cp cgi/cgi_proc wwwroot
-
+rm -f wwwroot/cgi_proc
+g++ -o wwwroot/cgi_proc cgi/cgi_proc.cc -std=c++11
 make clean;
 make

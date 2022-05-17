@@ -16,7 +16,7 @@ private:
     std::vector<epoll_event> _evs;
 
 public:
-    Epoller();
+    Epoller(int evs_size = 128);
 
     ~Epoller();
 

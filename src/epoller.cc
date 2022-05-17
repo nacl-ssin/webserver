@@ -4,7 +4,7 @@
 
 #include "epoller.h"
 
-Epoller::Epoller() : _epollfd(epoll_create(1)), _evs(512) {
+Epoller::Epoller(int evs_size) : _epollfd(epoll_create(1)), _evs(evs_size) {
 
 }
 

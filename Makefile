@@ -1,7 +1,7 @@
 TARGET = webserver
 CXX = g++
 
-SOURCE = src/*.cc main.cpp
+SOURCE = src/*.cc main.cc
 HEADER_DIR = include/
 
 COMPILE_FLAGS = -std=c++11 -I$(HEADER_DIR) -lpthread -lmysqlclient -Wall

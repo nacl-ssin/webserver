@@ -14,11 +14,10 @@
 #include <functional>
 #include <unordered_map>
 #include "http_connection.h"
+#include "thread_pool.hpp"
 #include "epoller.h"
-#include "log.h"
+#include "logger.h"
 
-
-class thread_pool;
 
 class Webserver {
 	using port_t = unsigned short;
@@ -34,6 +33,10 @@ private:
 
 public:
 	explicit Webserver(port_t port);
+
+	Webserver(const Webserver &ws) = delete;
+
+	Webserver &operator=(const Webserver &ws) = delete;
 
 	~Webserver();
 
@@ -54,10 +57,11 @@ public:
 	void post(const std::string &url, request_trigger trigger);
 
 private:
-	/**
-	 * 接收请求处理
-	 */
-	static void accept_cb(Webserver *ws);
+	 /**
+	  * 接收请求处理
+	  * @param ws
+	  */
+	void accept_cb();
 
 	/**
 	 * 响应回调

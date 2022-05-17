@@ -1,24 +1,19 @@
-//
 
 #include "protocol.h"
 
 // Request--------------------------------------------------------------------------------
 
 void HttpRequest::parse(const std::string &request_str) {
-	LOG_INFO("request str = %s", request_str.c_str());
 	std::string line;
 	size_t pos = 0;
 	while (pos < request_str.size()) {
 		auto p = read_line(request_str, pos);
 		line = p.first;
-		//LOG_INFO("line = %s", line.c_str());
 		if (pos == 0) {
 			// 解析请求行
 			std::stringstream ss(line);
-			//LOG_INFO("line = %s", line.c_str());
 			ss >> _method >> _path >> _version;
 			_method = to_upper(_method);
-			//LOG_INFO("method = %s", _method.c_str());
 			// 将请求地址和参数分离，如果有的话
 			auto v = split(_path, "?");
 			_path = std::move(v[0]);
@@ -28,9 +23,6 @@ void HttpRequest::parse(const std::string &request_str) {
 		} else {
 			// 解析请求头
 			std::vector<std::string> ret = split(line, ": ");
-			//for (auto &s : ret) {
-				//LOG_INFO("header = %s", s.c_str());
-			//}
 			if (ret.size() == 2) {
 				_header.emplace_back(std::make_pair(ret[0], ret[1]));
 			}
@@ -41,7 +33,6 @@ void HttpRequest::parse(const std::string &request_str) {
 			// 到了请求正文了
 			p = read_line(request_str, pos);
 			_body = p.first;
-			//LOG_INFO("request body = %s", p.first.c_str());
 			pos = p.second + 1;
 		}
 	}
@@ -64,15 +55,7 @@ void HttpRequest::parse(const std::string &request_str) {
 		}
 	}
 
-
 	LOG_INFO("parse data ending...");
-
-	//LOG_INFO("method = %s url = %s version = %s", _request._method.c_str(), _request._path.c_str(),
-	//		 _request._version.c_str());
-	//
-	//for (auto &p : _request._header) {
-	//	LOG_INFO("key = %s, val = %s", p.first.c_str(), p.second.c_str());
-	//}
 }
 
 
@@ -89,7 +72,6 @@ std::string HttpRequest::get_params(const std::string &key) {
 	}
 	return "";
 }
-
 
 
 

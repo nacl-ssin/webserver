@@ -74,7 +74,7 @@ void HttpConnection::send_file() {
 			// 是一个可执行文件，特殊处理
 			cgi_handler();
 		} else {
-			// 是一个文件，打开文件准备响应正文
+			// 是一个资源文件，打开文件准备响应正文
 			RD_FILE:
 			fd = open((RESOURCE_ROOT + _request._path).c_str(), O_RDONLY);
 			if (fd >= 0) {
@@ -105,7 +105,6 @@ void HttpConnection::send_file() {
 
 void HttpConnection::send() {
 	std::string res = _response.build();
-	//LOG_INFO("res = %s", res.c_str());
 	::send(_fd, res.c_str(), res.size(), 0);
 	_response._header.clear();
 	_response._body.clear();

@@ -11,10 +11,10 @@
 #include <thread>
 #include <atomic>
 #include <future>
-#include <iostream>
 #include <functional>
 #include <condition_variable>
-#include "log.h"
+#include "logger.h"
+#include <vector>
 
 
 class thread_pool {
@@ -35,7 +35,6 @@ public:
 	// 任务队列为空的条件变量
 	std::condition_variable _empty_cond;
 
-
 public:
 	thread_pool() : _running(true), _busy_thread_num(0), _alive_thread_num(0) {
 
@@ -43,7 +42,20 @@ public:
 
 	thread_pool(const thread_pool &) = delete;
 
-	thread_pool(thread_pool &&) = delete;
+	thread_pool &operator=(const thread_pool &) = delete;
+
+	thread_pool(thread_pool &&rvalue) {
+		*this = std::forward<thread_pool>(rvalue);
+	}
+
+	thread_pool &operator=(thread_pool &&rvalue)  noexcept {
+		_task_q = std::move(rvalue._task_q);
+		_thread_list = std::move(rvalue._thread_list);
+		_running.exchange(rvalue._running);
+		_busy_thread_num.exchange(rvalue._busy_thread_num);
+		_alive_thread_num.exchange(rvalue._alive_thread_num);
+		return *this;
+	}
 
 	~thread_pool() {
 		if (_running) {
@@ -60,8 +72,6 @@ public:
 		auto task = std::make_shared<std::packaged_task<RetType()>>(
 				std::bind(std::forward<Callable>(call), std::forward<Args>(args)...));
 
-		//LOG_INFO("push a task");
-
 		{
 			std::unique_lock<std::mutex> lk(_task_mtx);
 			// add task
@@ -70,7 +80,6 @@ public:
 			});
 		}
 
-		//LOG_INFO("push a task size = %d", _task_q.size());
 		_empty_cond.notify_one();
 		return task->get_future();
 	}
@@ -78,7 +87,6 @@ public:
 
 	// init thread pool
 	void start(std::size_t create_num = std::thread::hardware_concurrency() * 10) {
-		//LOG_INFO("create num = %lu", create_num);
 		for (size_t i = 0; i < create_num; ++i) {
 			_thread_list.emplace_back(thread_pool::routine, this);
 		}
@@ -108,11 +116,6 @@ public:
 		return _alive_thread_num;
 	}
 
-public:
-	thread_pool &operator=(const thread_pool &) = delete;
-
-	thread_pool &operator=(const thread_pool &&) = delete;
-
 private:
 	// thread routine
 	static void routine(thread_pool *pool) {
@@ -132,16 +135,13 @@ private:
 				task = std::move(pool->_task_q.front());
 				pool->_task_q.pop();
 			}
-			//LOG_INFO("get a task");
 
 			++pool->_busy_thread_num;
-			//LOG_INFO("thread id = %lu running...", pthread_self());
 			task();
 			--pool->_busy_thread_num;
-			LOG_INFO("task run end");
-
 			// thread exit
-			if (!pool->_running) return;
+			if (!pool->_running)
+				return;
 		}
 	}
 };
