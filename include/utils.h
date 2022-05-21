@@ -41,4 +41,13 @@ std::vector<std::string> split(const std::string &src, const std::string &rep);
  * 将字符串变为大写
  * @param str
  */
-std::string to_upper(std::string &str);
+std::string to_upper(const std::string &str);
+
+
+/**
+ * 忽略大小写比较两个字符串
+ * @param str1
+ * @param str2
+ * @return
+ */
+bool strcmpi(const std::string &str1, const std::string &str2);

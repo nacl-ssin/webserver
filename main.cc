@@ -11,6 +11,7 @@ MYSQL *get_connection() {
 int main() {
 	Webserver svr(8080);
 
+
 	svr.get("/test", [](HttpRequest &req, HttpResponse &res) {
 		res.set_body("Hello World");
 		res.set_code(200);

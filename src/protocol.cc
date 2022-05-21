@@ -55,7 +55,7 @@ void HttpRequest::parse(const std::string &request_str) {
 		}
 	}
 
-	LOG_INFO("parse data ending...");
+	LOG_INFO("parse data end...");
 }
 
 

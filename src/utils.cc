@@ -54,15 +54,20 @@ std::vector<std::string> split(const std::string &src, const std::string &rep) {
 	return ret;
 }
 
-std::string to_upper(std::string &str) {
+std::string to_upper(const std::string &str) {
 	std::string ret;
 	ret.reserve(str.size());
 	for (auto c : str) {
-		ret.push_back(toupper(c));
+		if (std::isalpha(c)) {
+			ret.push_back(toupper(c));
+		}
 	}
 	return ret;
 }
 
 
+bool strcmpi(const std::string &str1, const std::string &str2) {
+	return to_upper(str1) == to_upper(str2);
+}
 
 

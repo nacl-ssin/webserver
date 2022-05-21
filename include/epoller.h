@@ -25,7 +25,7 @@ public:
      * @param ei
      * @return
      */
-    bool add_event(int fd, int events) const;
+    bool add_event(int fd, uint32_t events) const;
 
     /**
      * 取消io检测
@@ -39,7 +39,7 @@ public:
      * @param ei
      * @return
      */
-    bool modify(int fd, int events) const;
+    bool modify(int fd, uint32_t events) const;
 
     /**
      * io事件等待

@@ -19,11 +19,12 @@ class HttpConnection {
 	friend class Webserver;
 private:
     int _fd;
+	bool _ready;
 	bool _closed;
     sockaddr_in _addr;
     HttpRequest _request;
     HttpResponse _response;
-	static const std::string RESOURCE_ROOT;
+	static std::string _static_resource_root_path;
 
 public:
 	HttpConnection();
@@ -35,6 +36,12 @@ public:
 	 * @return
 	 */
 	std::string server_name();
+
+	/**
+	 * 是否准备好响应报文
+	 * @return
+	 */
+	bool ready() const;
 
 	/**
 	 * 读取数据
@@ -56,6 +63,12 @@ public:
 	 * 未知的资源
 	 */
 	void send_error();
+
+	/**
+	 * 是否是长连接
+	 * @return
+	 */
+	bool keep_alive();
 
 	/**
 	 * 关闭连接
@@ -86,14 +99,10 @@ public:
 		return _request._path;
 	}
 
-
-	/**
-	 * 完整的资源路径
-	 * @return
-	 */
-	inline std::string full_file_path() {
-		return HttpConnection::RESOURCE_ROOT + _request._path;
+	inline std::string get_resource_full_path() {
+		return _static_resource_root_path + _request._path;
 	}
+
 private:
 	/**
 	 * cgi处理

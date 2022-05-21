@@ -28,11 +28,13 @@ private:
 	Epoller _ioc;
 	port_t _port;
 	thread_pool *_tp;
+	uint32_t _lfd_event;
+	std::string _static_resource_root_path;
 	std::unordered_map<int, HttpConnection> _connects;
 	std::unordered_map<std::string, request_trigger> _events_map;
 
 public:
-	explicit Webserver(port_t port);
+	Webserver(port_t port, bool is_et = true);
 
 	Webserver(const Webserver &ws) = delete;
 
@@ -56,6 +58,12 @@ public:
 
 	void post(const std::string &url, request_trigger trigger);
 
+	/**
+	 * 设置静态资源的路径
+	 * @param path
+	 */
+	void static_path(std::string static_path);
+
 private:
 	 /**
 	  * 接收请求处理
@@ -65,9 +73,17 @@ private:
 
 	/**
 	 * 响应回调
+	 * @param ws
 	 * @param fd
 	 */
 	static void recv_cb(Webserver *ws, int fd);
+
+	/**
+	 * 发送回调
+	 * @param ws
+	 * @param fd
+	 */
+	static void write_cb(Webserver *ws, int fd);
 
 	/**
 	 * 出错回调

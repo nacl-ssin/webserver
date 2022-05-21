@@ -14,7 +14,7 @@ Epoller::~Epoller() {
     }
 }
 
-bool Epoller::add_event(int fd, int events) const {
+bool Epoller::add_event(int fd, uint32_t events) const {
     epoll_event ev = {};
     ev.events = events;
     ev.data.fd = fd;
@@ -25,7 +25,7 @@ bool Epoller::cancel(int fd) const {
     return epoll_ctl(_epollfd, EPOLL_CTL_DEL, fd, nullptr) == 0;
 }
 
-bool Epoller::modify(int fd, int events) const {
+bool Epoller::modify(int fd, uint32_t events) const {
     epoll_event ev = {};
     ev.events = events;
     ev.data.fd = fd;
