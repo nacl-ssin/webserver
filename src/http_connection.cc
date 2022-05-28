@@ -5,16 +5,17 @@
 #include "http_connection.h"
 
 
+uint32_t HttpConnection::_trigger_mode = EPOLLET;
+
 std::string HttpConnection::_static_resource_root_path = "./wwwroot";
+//std::string HttpConnection::_static_resource_root_path = "../wwwroot";
 
 
-HttpConnection::HttpConnection() : _fd(-1), _ready(false), _closed(false), _addr() {
-
+HttpConnection::HttpConnection() : _fd(-1), _closed(false), _addr() {
 }
 
 
-HttpConnection::HttpConnection(int sock, sockaddr_in addr) : _fd(sock), _ready(false), _closed(false), _addr(addr) {
-
+HttpConnection::HttpConnection(int sock, sockaddr_in addr) : _fd(sock), _closed(false), _addr(addr) {
 }
 
 
@@ -25,32 +26,43 @@ std::string HttpConnection::server_name() {
 }
 
 
-bool HttpConnection::ready() const {
-	return _ready;
+int HttpConnection::receive() {
+	char buf[512];
+	do {
+		memset(buf, 0, sizeof(buf));
+		//LOG_INFO("read begin");
+		ssize_t nread = read(_fd, buf, sizeof(buf) - 1);
+		//LOG_INFO("read = %s, nread = %d", buf, nread);
+
+		if (nread > 0) {
+			_inbuffer.append(buf);
+			_request.parse(_inbuffer);
+		} else if (nread == 0) {
+			return 0;
+		} else {
+			// 底层没有数据了
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				return 0;
+			}
+
+			// 被信号中断
+			if (errno == EINTR) {
+				continue;
+			}
+
+			// 出错
+			return -1;
+		}
+		//sleep(1);
+	} while (HttpConnection::is_et());
 }
 
 
-ssize_t HttpConnection::receive() {
-	char buf[4096] = {0};
-	memset(buf, 0, sizeof(buf));
-	ssize_t nread = recv(_fd, buf, sizeof(buf) - 1, 0);
-	if (nread <= 0) {
-		return nread;
-	}
-
-	buf[nread] = 0;
-	_request.parse(buf);
-	_response._version = _request._version;
-	_ready = true;
-	return nread;
-}
-
-
-void HttpConnection::send_file() {
+int HttpConnection::send_file() {
 	// 获取请求资源的路径
 	std::string fpath = get_resource_full_path();
 	if (access(fpath.c_str(), F_OK) != 0) {
-		send_error();
+		return send_error();
 	}
 	// 文件描述符
 	int fd = -1;
@@ -95,31 +107,123 @@ void HttpConnection::send_file() {
 		}
 	}
 
+	// 请求行、请求头、请求空行
+	send();
 
 	//发送响应行、报头、空行，如果有响应体的话，一起发送
-	send();
 	// 文件打开成功！
 	// 改接口可以直接将文件的数据直接拷贝到网卡缓冲区中，就不用先拷贝到用户缓冲区，然后再拷贝至网卡缓冲区，少了一次拷贝
 	if (fd >= 0) {
-		sendfile(_fd, fd, nullptr, st.st_size);
+		ssize_t n = st.st_size;
+		ssize_t write_size = 0;
+		do {
+			off_t of = write_size;
+			ssize_t nsend = sendfile(_fd, fd, &of, n);
+			if (nsend > 0) {
+				n -= nsend;
+				write_size += nsend;
+			} else {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) {
+					char buf[n];
+					memset(buf, 0, n);
+					lseek(fd, write_size, SEEK_SET);
+					read(fd, buf, n);
+
+					LOG_WARRING("send = %d", write_size);
+					LOG_WARRING("no send = %d", n);
+
+					_outbuffer.append(buf, n);
+					break;
+				}
+
+				if (errno == EINTR) {
+					continue;
+				}
+
+				::close(fd);
+				return -1;
+			}
+		} while (HttpConnection::is_et() && n > 0);
 		::close(fd);
+		LOG_INFO("last");
+		return 0;
 	}
+	return 0;
 }
 
 
-void HttpConnection::send() {
+int HttpConnection::send() {
 	std::string res = _response.build();
-	write(_fd, res.c_str(), res.size());
+	size_t n = res.size();
+	ssize_t write_size = 0;
+
+	do {
+		ssize_t nwt = write(_fd, res.c_str() + write_size, n);
+		if (nwt > 0) {
+			n -= nwt;
+			write_size += nwt;
+		} else {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				//_outbuffer = res.substr(write_size);
+				_outbuffer.append(res.c_str() + write_size, n);
+				break;
+			}
+
+			if (errno == EINTR) {
+				continue;
+			}
+
+			//close();
+			return -1;
+		}
+	} while (HttpConnection::is_et() && n > 0);
 	_response._header.clear();
 	_response._body.clear();
-	_ready = false;
+	return 0;
 }
 
 
-void HttpConnection::send_error() {
+int HttpConnection::send_buffer() {
+	size_t n = _outbuffer.size();
+	size_t write_size = 0;
+	LOG_WARRING("send buffer fd = %d, size = %d", _fd, n);
+
+	do {
+		ssize_t nwt = write(_fd, _outbuffer.rd_ptr(), n);
+		if (nwt > 0) {
+			n -= nwt;
+			write_size += nwt;
+			_outbuffer.seek(nwt, Buffer::SET_CURT);
+			LOG_WARRING("send = %d", write_size);
+			LOG_WARRING("no send = %d", n);
+			if (n <= 0) {
+				_outbuffer.clear();
+				break;
+			}
+		} else {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				//_outbuffer.seek(write_size, Buffer::SET_CURT);
+				LOG_WARRING("nwt = %d", nwt);
+				LOG_WARRING("send = %d", write_size);
+				LOG_WARRING("no send = %d", _outbuffer.size());
+				return 0;
+			}
+
+			if (errno == EINTR) {
+				continue;
+			}
+
+			//close();
+			return -1;
+		}
+	} while (HttpConnection::is_et());
+}
+
+
+int HttpConnection::send_error() {
 	_response.set_code(404);
 	_response.set_body(_request._path + " Not Found");
-	send();
+	return send();
 }
 
 
@@ -235,6 +339,7 @@ void HttpConnection::cgi_handler() {
 		LOG_ERROR("fork error, cause: %s", strerror(errno));
 	}
 }
+
 
 
 

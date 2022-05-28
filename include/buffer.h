@@ -1,0 +1,78 @@
+//
+// Created by 26372 on 2022/5/27.
+//
+
+#ifndef WEBSERVER_BUFFER_H
+#define WEBSERVER_BUFFER_H
+
+#include <cstring>
+
+
+class Buffer {
+	using size_type = unsigned long;
+
+private:
+	char *_data;
+	size_type _size;
+	size_type _rd_idx;
+	size_type _capacity;
+
+public:
+	enum HOW_SEEK {
+		SET_OFFSET = 0,
+		SET_CURT
+	};
+
+public:
+
+	Buffer();
+
+	explicit Buffer(size_type capacity);
+
+	Buffer(const Buffer &bf);
+
+	~Buffer();
+
+	/**
+	 * 追加数据
+	 * @param data
+	 * @param size
+	 */
+	void append(const char *data, size_type size);
+
+
+	/**
+	 *	移动读取位置
+	 * @param offset
+	 * @param how
+	 */
+	void seek(size_type offset, HOW_SEEK how);
+
+
+	void reserve(size_type size);
+
+	inline size_type size() const {
+		return _size;
+	}
+
+
+	inline size_type capacity() const {
+		return _capacity;
+	}
+
+
+	inline char *rd_ptr() {
+		return _data + _rd_idx;
+	}
+
+
+	inline void clear() {
+		_size = 0;
+	}
+
+	inline bool empty() {
+		return _size == 0;
+	}
+};
+
+#endif //WEBSERVER_BUFFER_H

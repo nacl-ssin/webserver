@@ -3,59 +3,142 @@
 
 // Request--------------------------------------------------------------------------------
 
-void HttpRequest::parse(const std::string &request_str) {
+HttpRequest::HttpRequest() : _state(HttpRequest::parse_state::LINE) {
+
+}
+
+//void HttpRequest::parse(const std::string &request_str) {
+//	std::string line;
+//	size_t pos = 0;
+//	while (pos < request_str.size()) {
+//		auto p = read_line(request_str, pos);
+//		line = p.first;
+//		if (pos == 0) {
+//			// 解析请求行
+//			std::stringstream ss(line);
+//			ss >> _method >> _path >> _version;
+//			_method = to_upper(_method);
+//			// 将请求地址和参数分离，如果有的话
+//			auto v = split(_path, "?");
+//			_path = std::move(v[0]);
+//			if (v.size() > 1) {
+//				_query = std::move(v[1]);
+//			}
+//		} else {
+//			// 解析请求头
+//			std::vector<std::string> ret = split(line, ": ");
+//			if (ret.size() == 2) {
+//				_header.emplace_back(std::make_pair(ret[0], ret[1]));
+//			}
+//		}
+//		pos = p.second + 1;
+//
+//		if (line.empty()) {
+//			// 到了请求正文了
+//			p = read_line(request_str, pos);
+//			_body = p.first;
+//			pos = p.second + 1;
+//		}
+//	}
+//
+//	// 解析参数
+//	std::string params;
+//	if (_method == "POST") {
+//		params = _body;
+//	} else {
+//		params = _query;
+//	}
+//
+//	auto ret = split(params, "&");
+//	if (!ret.empty()) {
+//		for (auto &str : ret) {
+//			auto kv = split(str, "=");
+//			if (kv.size() == 2) {
+//				_params.emplace_back(kv[0], kv[1]);
+//			}
+//		}
+//	}
+//
+//	LOG_INFO("parse data end...");
+//}
+
+
+void HttpRequest::parse(std::string &buffer) {
+	switch (_state) {
+		case parse_state::LINE:
+			if (parse_line(buffer)) {
+				_state = parse_state::HEADERS;
+			} else {
+				break;
+			}
+		case parse_state::HEADERS:
+			if (parse_headers(buffer)) {
+				_state = parse_state::BODY;
+			} else {
+				break;
+			}
+		case parse_state::BODY:
+			if (strcmpi(_method, "GET")) {
+				_state = parse_state::READY;
+				break;
+			}
+			if (parse_body(buffer)) {
+				LOG_WARRING("ready !!!");
+				_state = parse_state::READY;
+			} else {
+				break;
+			}
+	}
+}
+
+
+bool HttpRequest::parse_line(std::string &buffer) {
 	std::string line;
-	size_t pos = 0;
-	while (pos < request_str.size()) {
-		auto p = read_line(request_str, pos);
-		line = p.first;
-		if (pos == 0) {
-			// 解析请求行
-			std::stringstream ss(line);
-			ss >> _method >> _path >> _version;
-			_method = to_upper(_method);
-			// 将请求地址和参数分离，如果有的话
-			auto v = split(_path, "?");
-			_path = std::move(v[0]);
-			if (v.size() > 1) {
-				_query = std::move(v[1]);
+	if (read_line(buffer, line)) {
+		std::stringstream ss(line);
+		ss >> _method >> _path >> _version;
+		std::vector<std::string> v = split(_path, "?");
+		_path = std::move(v[0]);
+		if (v.size() > 1) {
+			_query = std::move(v[1]);
+		}
+		LOG_INFO("method = %s, path = %s, version = %s", _method.c_str(), _path.c_str(), _version.c_str());
+		return true;
+	}
+	return false;
+}
+
+
+bool HttpRequest::parse_headers(std::string &buffer) {
+	std::string line;
+	while (true) {
+		if (read_line(buffer, line)) {
+			// 读取到空行了
+			if (line.empty()) {
+				return true;
+			} else {
+				//LOG_INFO("header = %s", line.c_str());
+				std::vector<std::string> ret = split(line, ": ");
+				if (ret.size() == 2) {
+					_header.emplace_back(std::make_pair(ret[0], ret[1]));
+				}
 			}
 		} else {
-			// 解析请求头
-			std::vector<std::string> ret = split(line, ": ");
-			if (ret.size() == 2) {
-				_header.emplace_back(std::make_pair(ret[0], ret[1]));
-			}
+			// 报头还没有解析完成
+			return false;
 		}
-		pos = p.second + 1;
-
-		if (line.empty()) {
-			// 到了请求正文了
-			p = read_line(request_str, pos);
-			_body = p.first;
-			pos = p.second + 1;
-		}
+		line.clear();
 	}
+}
 
-	// 解析参数
-	std::string params;
-	if (_method == "POST") {
-		params = _body;
-	} else {
-		params = _query;
+
+bool HttpRequest::parse_body(std::string &buffer) {
+	std::string line;
+	if (read_line(buffer, line)) {
+		LOG_FATAL("params = %s", line.c_str());
+		return true;
 	}
-
-	auto ret = split(params, "&");
-	if (!ret.empty()) {
-		for (auto &str : ret) {
-			auto kv = split(str, "=");
-			if (kv.size() == 2) {
-				_params.emplace_back(kv[0], kv[1]);
-			}
-		}
-	}
-
-	LOG_INFO("parse data end...");
+	return false;
 }
 
 
@@ -72,6 +155,8 @@ std::string HttpRequest::get_params(const std::string &key) {
 	}
 	return "";
 }
+
+
 
 
 

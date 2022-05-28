@@ -10,26 +10,30 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/fcntl.h>
 #include <sys/sendfile.h>
 #include <sys/wait.h>
+#include <sys/epoll.h>
 #include "protocol.h"
+#include "buffer.h"
 
 class HttpConnection {
 	friend class Webserver;
+
 private:
-    int _fd;
-	bool _ready;
+	int _fd;
 	bool _closed;
-    sockaddr_in _addr;
-    HttpRequest _request;
-    HttpResponse _response;
+	std::string _inbuffer;
+	Buffer _outbuffer;
+	sockaddr_in _addr;
+	HttpRequest _request;
+	HttpResponse _response;
+	static uint32_t _trigger_mode;
 	static std::string _static_resource_root_path;
 
 public:
 	HttpConnection();
 
-    HttpConnection(int sock, sockaddr_in addr);
+	HttpConnection(int sock, sockaddr_in addr);
 
 	/**
 	 * 获取客户端ip
@@ -38,31 +42,30 @@ public:
 	std::string server_name();
 
 	/**
-	 * 是否准备好响应报文
-	 * @return
-	 */
-	bool ready() const;
-
-	/**
 	 * 读取数据
 	 * @return
 	 */
-    ssize_t receive();
+	int receive();
 
 	/**
 	 * 发送数据
 	 */
-    void send_file();
+	int send_file();
 
 	/**
 	 * 构建响应报文发送
 	 */
-	void send();
+	int send();
+
+	/**
+	 * 发送缓冲区的内容
+	 */
+	int send_buffer();
 
 	/**
 	 * 未知的资源
 	 */
-	void send_error();
+	int send_error();
 
 	/**
 	 * 是否是长连接
@@ -71,10 +74,19 @@ public:
 	bool keep_alive();
 
 	/**
+	 * 继续接受报文
+	 */
+	void again_recv() {
+		_request._state = HttpRequest::parse_state::LINE;
+	}
+
+	/**
 	 * 关闭连接
 	 */
 	inline void close() {
 		_closed = true;
+		_inbuffer.clear();
+		_outbuffer.clear();
 		::close(_fd);
 	}
 
@@ -95,12 +107,38 @@ public:
 	}
 
 
+	/**
+	 * 获取请求路径
+	 * @return
+	 */
 	inline std::string &get_path() {
 		return _request._path;
 	}
 
+	/**
+	 * 获取文件资源的路径
+	 * @return
+	 */
 	inline std::string get_resource_full_path() {
 		return _static_resource_root_path + _request._path;
+	}
+
+
+	/**
+	 * 是否准备好响应报文
+	 * @return
+	 */
+	bool ready() const {
+		return _request._state == HttpRequest::parse_state::READY;
+	}
+
+
+	/**
+	 * 是否是EPOOLET触发模式
+	 * @return
+	 */
+	static bool is_et() {
+		return (HttpConnection::_trigger_mode & EPOLLET);
 	}
 
 private:
@@ -109,7 +147,6 @@ private:
 	 */
 	void cgi_handler();
 };
-
 
 
 #endif //WEBSERVER_HTTP_CONNECTION_H

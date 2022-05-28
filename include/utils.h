@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <ctime>
 #include <vector>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unordered_map>
@@ -30,6 +31,15 @@ std::pair<std::string, size_t> read_line(const std::string &src, size_t start);
 
 
 /**
+ * 读取一行数据，如果有一行，返回true
+ * @param src
+ * @param line
+ * @return
+ */
+bool read_line(std::string &src, std::string &line);
+
+
+/**
  * 字符串切分
  * @return
  */
@@ -51,3 +61,11 @@ std::string to_upper(const std::string &str);
  * @return
  */
 bool strcmpi(const std::string &str1, const std::string &str2);
+
+
+/**
+ * 设置非阻塞
+ * @param fd
+ * @return
+ */
+bool set_nonblock(int fd);

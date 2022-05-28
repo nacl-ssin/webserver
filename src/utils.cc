@@ -38,6 +38,29 @@ std::pair<std::string, size_t> read_line(const std::string &src, size_t start = 
 }
 
 
+bool read_line(std::string &src, std::string &line) {
+	int n = src.size();
+	for (int i = 0; i < n; ++i) {
+		if (src[i] == '\n') {
+			line = src.substr(0, i);
+			src = src.substr(i + 1);
+			return true;
+		}
+		if (src[i] == '\r') {
+			if (i + 1 < n && src[i + 1] == '\n') {
+				++i;
+				line = src.substr(0, i - 1);
+			} else {
+				line = src.substr(0, i);
+			}
+			src = src.substr(i + 1);
+			return true;
+		}
+	}
+	return false;
+}
+
+
 std::vector<std::string> split(const std::string &src, const std::string &rep) {
 	std::vector<std::string> ret;
 	size_t start = 0;
@@ -70,4 +93,7 @@ bool strcmpi(const std::string &str1, const std::string &str2) {
 	return to_upper(str1) == to_upper(str2);
 }
 
+bool set_nonblock(int fd) {
+	return fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK) == 0;
+}
 

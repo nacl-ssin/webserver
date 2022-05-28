@@ -28,13 +28,13 @@ private:
 	Epoller _ioc;
 	port_t _port;
 	thread_pool *_tp;
-	uint32_t _lfd_event;
+	uint32_t _trigger_mode;
 	std::string _static_resource_root_path;
 	std::unordered_map<int, HttpConnection> _connects;
 	std::unordered_map<std::string, request_trigger> _events_map;
 
 public:
-	Webserver(port_t port, bool is_et = true);
+	explicit Webserver(port_t port, bool is_et = true);
 
 	Webserver(const Webserver &ws) = delete;
 
