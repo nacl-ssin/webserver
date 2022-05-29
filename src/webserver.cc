@@ -6,7 +6,7 @@
 #include <utility>
 
 
-Webserver::Webserver(Webserver::port_t port, bool is_et) : _lfd(-1), _port(port), _tp(nullptr) {
+Webserver::Webserver(Webserver::port_t port, bool is_et) : _lfd(-1), _port(port) {
 	_trigger_mode = 0;
 	if (is_et) {
 		_trigger_mode |= EPOLLET;
@@ -56,14 +56,6 @@ void Webserver::init_server() {
 		exit(1);
 	}
 
-	// 初始化线程池
-	try {
-		_tp = new thread_pool;
-	} catch (...) {
-		LOG_FATAL("thread pool create error!");
-		exit(3);
-	}
-	_tp->start();
 	// 忽略掉SIGPIPE信号
 	signal(SIGPIPE, SIG_IGN);
 	LOG_INFO("server start on 8080 port");
@@ -85,48 +77,27 @@ void Webserver::static_path(std::string path) {
 }
 
 
-[[noreturn]] void Webserver::dispatch() {
-	_ioc.add_event(_lfd, EPOLLIN | _trigger_mode);
-
-	while (true) {
-		int nready = _ioc.wait(-1);
-		//LOG_INFO("nready = %d", nready);
-		auto *ready = _ioc.get_events();
-		for (int i = 0; i < nready; ++i) {
-			epoll_event ev = ready[i];
-			// 接收新连接
-			if (ev.data.fd == _lfd) {
-				accept_cb();
-				continue;
-			}
-
-			// 处理出错
-			if (ev.events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
-				LOG_ERROR("epollhup error fd = %d", ev.data.fd);
-				error_cb(this, ev.data.fd);
-				continue;
-			}
-
-			// 处理读取
-			if (ev.events & EPOLLIN) {
-				_tp->push_task(recv_cb, this, static_cast<int>(ev.data.fd));
-			}
-
-			// 处理写入
-			if (ev.events & EPOLLOUT) {
-				_tp->push_task(write_cb, this, static_cast<int>(ev.data.fd));
-			}
-		}
+void Webserver::start() {
+	EventItem ei;
+	ei._r = &_ioc;
+	ei._ptr = this;
+	if (_trigger_mode & EPOLLET) {
+		ei._async = true;
 	}
+	ei.register_event(_lfd, accept_cb, nullptr, nullptr);
+	_ioc.add_event(ei, EPOLLIN | _trigger_mode);
+	_ioc.event_dispatch(-1);
 }
 
 
-void Webserver::accept_cb() {
+void Webserver::accept_cb(EventItem &ei) {
+	auto svr = static_cast<Webserver *>(ei._ptr);
+	uint32_t mode = svr->_trigger_mode;
 	do {
 		sockaddr_in origin_addr = {};
 		socklen_t origin_addr_len = sizeof(origin_addr);
 		memset(&origin_addr, 0, sizeof(origin_addr));
-		int cfd = accept(_lfd, (sockaddr *) &origin_addr, &origin_addr_len);
+		int cfd = accept(ei._fd, (sockaddr *) &origin_addr, &origin_addr_len);
 		if (cfd > 0) {
 			LOG_INFO("accept a new client fd = %d", cfd);
 
@@ -137,102 +108,125 @@ void Webserver::accept_cb() {
 					continue;
 				}
 			}
-			_ioc.add_event(cfd, EPOLLIN | EPOLLET | EPOLLRDHUP);
-			_connects[cfd] = HttpConnection(cfd, origin_addr);
-		} else {
-			if (errno == EINTR) {
-				continue;
+			EventItem e;
+
+			// ET模式，异步调用
+			if (HttpConnection::is_et()) {
+				e._async = true;
 			}
+			e._r = ei._r;
+			e._ptr = ei._ptr;
+			e.register_event(cfd, recv_cb, write_cb, error_cb);
+			auto *svr = static_cast<Webserver *>(ei._ptr);
+			svr->_connects[cfd] = HttpConnection(cfd, origin_addr);
+			e._r->add_event(e, HttpConnection::_trigger_mode | EPOLLIN | EPOLLRDHUP);
+		} else {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				//LOG_INFO("empty connection");
 				return;
 			}
+
+			if (errno == EINTR) {
+				continue;
+			}
+
 			LOG_WARRING("accept_cb client failed!");
 			continue;
 		}
-	} while (_trigger_mode & EPOLLET);
+	} while (mode & EPOLLET);
 }
 
 
-void Webserver::recv_cb(Webserver *ws, int fd) {
-	LOG_INFO("recv from fd = %d client message", fd);
+void Webserver::recv_cb(EventItem &ei) {
+	LOG_INFO("recv from fd = %d client message", ei._fd);
+	auto *svr = static_cast<Webserver *>(ei._ptr);
+	if (svr->_connects.count(ei._fd) == 0) {
+		return;
+	}
 	// 读取数据
-	int r = ws->_connects[fd].receive();
+	int r = svr->_connects[ei._fd].receive();
 
-	//LOG_INFO("ready = %d", ws->_connects[fd].ready());
 	if (r != 0) {
-		LOG_ERROR("receive error fd = %d", fd);
-		error_cb(ws, fd);
+		LOG_ERROR("receive error fd = %d", ei._fd);
+		ei._error(ei);
 	} else {
-		if (ws->_connects[fd].is_close()) {
-			error_cb(ws, fd);
+		if (svr->_connects[ei._fd].is_close()) {
+			ei._error(ei);
 		} else {
-			if (ws->_connects[fd].ready() && !ws->_ioc.modify(fd, EPOLLOUT | EPOLLRDHUP | ws->_trigger_mode)) {
-				error_cb(ws, fd);
+			if (svr->_connects[ei._fd].ready() &&
+				!ei._r->modify(ei._fd, EPOLLOUT | EPOLLRDHUP | HttpConnection::_trigger_mode)) {
+				ei._error(ei);
 			}
 		}
 	}
 }
 
 
-void Webserver::write_cb(Webserver *ws, int fd) {
+void Webserver::write_cb(EventItem &ei) {
+	auto *svr = static_cast<Webserver *>(ei._ptr);
+	auto &connection = svr->_connects[ei._fd];
 	std::string url;
 	// 之前还有未发送的数据
-	if (!ws->_connects[fd].is_close() && !ws->_connects[fd]._outbuffer.empty()) {
-		LOG_INFO("closed = %d, fd = %d, empty = %d", ws->_connects[fd].is_close(), fd,
-				 ws->_connects[fd]._outbuffer.empty());
-		if (-1 == ws->_connects[fd].send_buffer()) {
-			error_cb(ws, fd);
+	LOG_FATAL("closed = %d, fd = %d, empty = %d", connection.is_close(), ei._fd,
+			  connection._outbuffer.empty());
+	if (!connection.is_close() && !connection._outbuffer.empty()) {
+		if (-1 == connection.send_buffer()) {
+			ei._error(ei);
 			return;
 		}
 		goto send_end;
 	}
 
 	// 连接未关闭并且响应报文准备完毕
-	if (!ws->_connects[fd].is_close() && ws->_connects[fd].ready()) {
-		LOG_INFO("write call fd = %d, thread id = %ld", fd, pthread_self());
-		url = ws->_connects[fd].get_method() + ":" + ws->_connects[fd].get_path();
-		if (ws->_events_map.find(url) != ws->_events_map.end()) {
-			(ws->_events_map[url])(ws->_connects[fd]._request, ws->_connects[fd]._response);
-			if (-1 == ws->_connects[fd].send()) {
-				error_cb(ws, fd);
+	if (!connection.is_close() && connection.ready()) {
+		LOG_INFO("write call fd = %d, thread id = %ld", ei._fd, pthread_self());
+		url = connection.get_method() + ":" + connection.get_path();
+		if (svr->_events_map.find(url) != svr->_events_map.end()) {
+			(svr->_events_map[url])(connection._request, connection._response);
+			if (-1 == connection.send()) {
+				ei._error(ei);
 			}
 		} else {
-			if (-1 == ws->_connects[fd].send_file()) {
-				error_cb(ws, fd);
+			if (-1 == connection.send_file()) {
+				ei._error(ei);
 			}
 		}
 
 		send_end:
 
+		LOG_FATAL("closed = %d, fd = %d, empty = %d", connection.is_close(), ei._fd,
+				  connection._outbuffer.empty());
 		// 这次响应是否发送完毕
-		if (ws->_connects[fd]._outbuffer.empty()) {
-			if (ws->_connects[fd].keep_alive()) {
-				if (!ws->_ioc.modify(fd, EPOLLIN | EPOLLRDHUP | ws->_trigger_mode)) {
+		if (connection._outbuffer.empty()) {
+			LOG_WARRING("empty");
+			if (connection.keep_alive()) {
+				if (!svr->_ioc.modify(ei._fd, EPOLLIN | EPOLLRDHUP | HttpConnection::_trigger_mode)) {
 					LOG_ERROR("modify error");
-					error_cb(ws, fd);
+					ei._error(ei);
 					return;
 				}
 				//继续解析报文
-				if (ws->_connects[fd].keep_alive()) {
-					ws->_connects[fd].again_recv();
-				}
+				connection.clear();
+				connection.again_recv();
 			} else {
-				error_cb(ws, fd);
+				ei._error(ei);
 			}
 		}
 	}
 }
 
 
-void Webserver::error_cb(Webserver *ws, int fd) {
-	LOG_INFO("close fd = %d", fd);
-	// 关闭连接
-	//LOG_INFO("server name = %s, fd = %d quit!", ws->_connects[fd].server_name().c_str(), fd);
-	ws->_connects[fd].close();
-	ws->_ioc.cancel(fd);
+void Webserver::error_cb(EventItem &ei) {
+	auto *svr = static_cast<Webserver *>(ei._ptr);
+	if (svr->_connects.count(ei._fd) != 0) {
+		auto &connection = svr->_connects[ei._fd];
+		// 关闭连接
+		LOG_INFO("server name = %s, fd = %d quit!", connection.server_name().c_str(), ei._fd);
+		connection.close();
+		svr->_connects.erase(ei._fd);
+		svr->_ioc.cancel(ei._fd);
+	}
 }
-
 
 
 

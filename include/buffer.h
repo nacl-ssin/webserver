@@ -11,7 +11,7 @@
 class Buffer {
 	using size_type = unsigned long;
 
-private:
+public:
 	char *_data;
 	size_type _size;
 	size_type _rd_idx;
@@ -30,6 +30,8 @@ public:
 	explicit Buffer(size_type capacity);
 
 	Buffer(const Buffer &bf);
+
+	Buffer(Buffer &&rvalue) noexcept;
 
 	~Buffer();
 
@@ -51,27 +53,48 @@ public:
 
 	void reserve(size_type size);
 
+	Buffer &operator=(Buffer bf) {
+		swap(bf);
+		return *this;
+	}
+
+	Buffer &operator=(Buffer &&rvalue) noexcept {
+		swap(rvalue);
+		return *this;
+	}
+
 	inline size_type size() const {
 		return _size;
 	}
 
+	inline size_type unsent_size() const {
+		return _size - _rd_idx;
+	}
 
 	inline size_type capacity() const {
 		return _capacity;
 	}
 
 
-	inline char *rd_ptr() {
+	inline char *rd_ptr() const {
 		return _data + _rd_idx;
 	}
 
 
 	inline void clear() {
+		_rd_idx = 0;
 		_size = 0;
 	}
 
-	inline bool empty() {
-		return _size == 0;
+	inline bool empty() const {
+		return _rd_idx == _size;
+	}
+
+	void swap(Buffer &bf) {
+		std::swap(_data, bf._data);
+		std::swap(_size, bf._size);
+		std::swap(_rd_idx, bf._rd_idx);
+		std::swap(_capacity, bf._capacity);
 	}
 };
 

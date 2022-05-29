@@ -88,6 +88,14 @@ public:
 	 * @return
 	 */
 	std::string get_params(const std::string &key);
+
+
+	inline void clear() {
+		_header.clear();
+		_params.clear();
+		_body.clear();
+		_path.clear();
+	}
 };
 
 
@@ -140,6 +148,12 @@ public:
 	 * @return
 	 */
 	std::string build();
+
+
+	inline void clear() {
+		_header.clear();
+		_body.clear();
+	}
 };
 
 

@@ -19,6 +19,30 @@ HttpConnection::HttpConnection(int sock, sockaddr_in addr) : _fd(sock), _closed(
 }
 
 
+HttpConnection &HttpConnection::operator=(const HttpConnection &hc) {
+	_fd = hc._fd;
+	_addr = hc._addr;
+	_closed = hc._closed;
+	_request = hc._request;
+	_response = hc._response;
+	_inbuffer = hc._inbuffer;
+	_outbuffer = hc._outbuffer;
+	return *this;
+}
+
+
+HttpConnection &HttpConnection::operator=(HttpConnection &&rvalue) noexcept {
+	std::swap(_fd, rvalue._fd);
+	_outbuffer.swap(rvalue._outbuffer);
+	_inbuffer.swap(rvalue._inbuffer);
+	std::swap(_addr, rvalue._addr);
+	std::swap(_closed, rvalue._closed);
+	std::swap(_request, rvalue._request);
+	std::swap(_response, rvalue._response);
+	return *this;
+}
+
+
 std::string HttpConnection::server_name() {
 	std::string ip(16, 0);
 	inet_ntop(AF_INET, &_addr.sin_addr.s_addr, &ip[0], 16);
@@ -28,17 +52,16 @@ std::string HttpConnection::server_name() {
 
 int HttpConnection::receive() {
 	char buf[512];
+	ssize_t nread = 0;
 	do {
 		memset(buf, 0, sizeof(buf));
 		//LOG_INFO("read begin");
-		ssize_t nread = read(_fd, buf, sizeof(buf) - 1);
+		nread = read(_fd, buf, sizeof(buf) - 1);
 		//LOG_INFO("read = %s, nread = %d", buf, nread);
 
 		if (nread > 0) {
 			_inbuffer.append(buf);
 			_request.parse(_inbuffer);
-		} else if (nread == 0) {
-			return 0;
 		} else {
 			// 底层没有数据了
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -53,8 +76,8 @@ int HttpConnection::receive() {
 			// 出错
 			return -1;
 		}
-		//sleep(1);
 	} while (HttpConnection::is_et());
+	return 0;
 }
 
 
@@ -108,7 +131,7 @@ int HttpConnection::send_file() {
 	}
 
 	// 请求行、请求头、请求空行
-	send();
+	ret = send();
 
 	//发送响应行、报头、空行，如果有响应体的话，一起发送
 	// 文件打开成功！
@@ -116,21 +139,21 @@ int HttpConnection::send_file() {
 	if (fd >= 0) {
 		ssize_t n = st.st_size;
 		ssize_t write_size = 0;
+		//LOG_WARRING("total size = %ld", n);
 		do {
 			off_t of = write_size;
 			ssize_t nsend = sendfile(_fd, fd, &of, n);
 			if (nsend > 0) {
 				n -= nsend;
 				write_size += nsend;
+				//LOG_WARRING("send = %d", write_size);
+				//LOG_WARRING("no send = %d", n);
 			} else {
 				if (errno == EAGAIN || errno == EWOULDBLOCK) {
 					char buf[n];
 					memset(buf, 0, n);
 					lseek(fd, write_size, SEEK_SET);
 					read(fd, buf, n);
-
-					LOG_WARRING("send = %d", write_size);
-					LOG_WARRING("no send = %d", n);
 
 					_outbuffer.append(buf, n);
 					break;
@@ -145,10 +168,10 @@ int HttpConnection::send_file() {
 			}
 		} while (HttpConnection::is_et() && n > 0);
 		::close(fd);
-		LOG_INFO("last");
 		return 0;
+	} else {
+		return ret;
 	}
-	return 0;
 }
 
 
@@ -163,60 +186,60 @@ int HttpConnection::send() {
 			n -= nwt;
 			write_size += nwt;
 		} else {
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				//_outbuffer = res.substr(write_size);
-				_outbuffer.append(res.c_str() + write_size, n);
-				break;
-			}
-
 			if (errno == EINTR) {
 				continue;
 			}
 
-			//close();
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				_outbuffer.append(res.c_str() + write_size, n);
+				break;
+			}
+
 			return -1;
 		}
 	} while (HttpConnection::is_et() && n > 0);
-	_response._header.clear();
-	_response._body.clear();
 	return 0;
 }
 
 
 int HttpConnection::send_buffer() {
-	size_t n = _outbuffer.size();
-	size_t write_size = 0;
-	LOG_WARRING("send buffer fd = %d, size = %d", _fd, n);
-
+	ssize_t n = _outbuffer.unsent_size();
+	ssize_t write_size = 0;
+	//LOG_ERROR("send buffer rd_idx = %d, unsent_size = %d, fd = %d", _outbuffer._rd_idx, n, _fd);
 	do {
 		ssize_t nwt = write(_fd, _outbuffer.rd_ptr(), n);
 		if (nwt > 0) {
 			n -= nwt;
 			write_size += nwt;
+			//LOG_WARRING("rdx_idx = %d", _outbuffer._rd_idx);
 			_outbuffer.seek(nwt, Buffer::SET_CURT);
-			LOG_WARRING("send = %d", write_size);
-			LOG_WARRING("no send = %d", n);
+			//LOG_WARRING("send = %d", write_size);
+			//LOG_WARRING("no send = %d", n);
+			//LOG_WARRING("rdx_idx = %d", _outbuffer._rd_idx);
 			if (n <= 0) {
 				_outbuffer.clear();
-				break;
-			}
-		} else {
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				//_outbuffer.seek(write_size, Buffer::SET_CURT);
-				LOG_WARRING("nwt = %d", nwt);
-				LOG_WARRING("send = %d", write_size);
-				LOG_WARRING("no send = %d", _outbuffer.size());
 				return 0;
 			}
-
+		} else {
 			if (errno == EINTR) {
 				continue;
 			}
 
-			//close();
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				//_outbuffer.seek(write_size, Buffer::SET_CURT);
+				//LOG_WARRING("nwt = %d", nwt);
+				//LOG_WARRING("send = %d", write_size);
+				//LOG_WARRING("no send = %d", n);
+				//LOG_ERROR("send buffer rd_idx = %d, size = %d", _outbuffer._rd_idx, n);
+				return 0;
+			}
+
+			LOG_ERROR("send buffer error");
 			return -1;
 		}
 	} while (HttpConnection::is_et());
+
+	return 0;
 }
 
 
@@ -339,6 +362,9 @@ void HttpConnection::cgi_handler() {
 		LOG_ERROR("fork error, cause: %s", strerror(errno));
 	}
 }
+
+
+
 
 
 

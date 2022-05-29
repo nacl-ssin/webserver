@@ -16,6 +16,7 @@
 #include "protocol.h"
 #include "buffer.h"
 
+
 class HttpConnection {
 	friend class Webserver;
 
@@ -34,6 +35,10 @@ public:
 	HttpConnection();
 
 	HttpConnection(int sock, sockaddr_in addr);
+
+	HttpConnection &operator=(const HttpConnection &hc);
+
+	HttpConnection &operator=(HttpConnection &&rvalue) noexcept;
 
 	/**
 	 * 获取客户端ip
@@ -96,6 +101,13 @@ public:
 	 */
 	inline bool is_close() const {
 		return _closed;
+	}
+
+	inline void clear() {
+		_inbuffer.clear();
+		_outbuffer.clear();
+		_request.clear();
+		_response.clear();
 	}
 
 	/**

@@ -14,7 +14,6 @@
 #include <functional>
 #include <unordered_map>
 #include "http_connection.h"
-#include "thread_pool.hpp"
 #include "epoller.h"
 #include "logger.h"
 
@@ -27,7 +26,6 @@ private:
 	int _lfd;
 	Epoller _ioc;
 	port_t _port;
-	thread_pool *_tp;
 	uint32_t _trigger_mode;
 	std::string _static_resource_root_path;
 	std::unordered_map<int, HttpConnection> _connects;
@@ -50,7 +48,7 @@ public:
 	/**
 	 * 进行事件分发
 	 */
-	[[noreturn]] void dispatch();
+	void start();
 
 
 	void get(const std::string &url, request_trigger trigger);
@@ -65,31 +63,32 @@ public:
 	void static_path(std::string static_path);
 
 private:
-	 /**
-	  * 接收请求处理
-	  * @param ws
-	  */
-	void accept_cb();
+	/**
+	 * 接收新连接
+	 * @param ei
+	 */
+	static void accept_cb(EventItem &ei);
 
 	/**
 	 * 响应回调
 	 * @param ws
 	 * @param fd
 	 */
-	static void recv_cb(Webserver *ws, int fd);
+	static void recv_cb(EventItem &ei);
 
 	/**
 	 * 发送回调
 	 * @param ws
 	 * @param fd
 	 */
-	static void write_cb(Webserver *ws, int fd);
+	static void write_cb(EventItem &ei);
+
 
 	/**
 	 * 出错回调
 	 * @param fd
 	 */
-	static void error_cb(Webserver *ws, int fd);
+	static void error_cb(EventItem &ei);
 };
 
 

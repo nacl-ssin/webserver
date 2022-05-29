@@ -7,61 +7,6 @@ HttpRequest::HttpRequest() : _state(HttpRequest::parse_state::LINE) {
 
 }
 
-//void HttpRequest::parse(const std::string &request_str) {
-//	std::string line;
-//	size_t pos = 0;
-//	while (pos < request_str.size()) {
-//		auto p = read_line(request_str, pos);
-//		line = p.first;
-//		if (pos == 0) {
-//			// 解析请求行
-//			std::stringstream ss(line);
-//			ss >> _method >> _path >> _version;
-//			_method = to_upper(_method);
-//			// 将请求地址和参数分离，如果有的话
-//			auto v = split(_path, "?");
-//			_path = std::move(v[0]);
-//			if (v.size() > 1) {
-//				_query = std::move(v[1]);
-//			}
-//		} else {
-//			// 解析请求头
-//			std::vector<std::string> ret = split(line, ": ");
-//			if (ret.size() == 2) {
-//				_header.emplace_back(std::make_pair(ret[0], ret[1]));
-//			}
-//		}
-//		pos = p.second + 1;
-//
-//		if (line.empty()) {
-//			// 到了请求正文了
-//			p = read_line(request_str, pos);
-//			_body = p.first;
-//			pos = p.second + 1;
-//		}
-//	}
-//
-//	// 解析参数
-//	std::string params;
-//	if (_method == "POST") {
-//		params = _body;
-//	} else {
-//		params = _query;
-//	}
-//
-//	auto ret = split(params, "&");
-//	if (!ret.empty()) {
-//		for (auto &str : ret) {
-//			auto kv = split(str, "=");
-//			if (kv.size() == 2) {
-//				_params.emplace_back(kv[0], kv[1]);
-//			}
-//		}
-//	}
-//
-//	LOG_INFO("parse data end...");
-//}
-
 
 void HttpRequest::parse(std::string &buffer) {
 	switch (_state) {
@@ -88,6 +33,8 @@ void HttpRequest::parse(std::string &buffer) {
 			} else {
 				break;
 			}
+		default:
+			break;
 	}
 }
 

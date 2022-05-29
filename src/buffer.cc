@@ -15,14 +15,18 @@ Buffer::Buffer(size_type capacity) : _data(new char[capacity]), _size(0), _rd_id
 
 Buffer::Buffer(const Buffer &bf) {
 	_size = bf._size;
-	_rd_idx = _rd_idx;
+	_rd_idx = bf._rd_idx;
 	_capacity = bf._capacity;
 	_data = new char[_capacity];
 	memcpy(_data, bf._data, _size);
 }
 
+Buffer::Buffer(Buffer &&rv) noexcept {
+	swap(rv);
+}
+
+
 Buffer::~Buffer() {
-	LOG_INFO("~Buffer");
 	delete[] _data;
 	_data = nullptr;
 }
@@ -55,13 +59,12 @@ void Buffer::reserve(Buffer::size_type n) {
 	if (n > _capacity) {
 		char *tmp = new char[n];
 		memcpy(tmp, _data, _size);
-		LOG_INFO("buffer thread id = %ld", pthread_self());
-		LOG_ERROR("buffer reserver begin");
-		//delete[] _data;
-		LOG_ERROR("buffer reserver end");
+		delete[] _data;
 		_data = tmp;
 		_capacity = n;
 	}
 }
+
+
 
 
